@@ -13,6 +13,7 @@ class Document(dict):
 		super().__init__(values)
 		self.check_permission = Mock()
 		self.apply_fieldlevel_read_permissions = Mock()
+		self._has_fieldlevel_read_restrictions = Mock(return_value=False)
 		self.insert = Mock()
 		self.save = Mock()
 		self.submit = Mock()
@@ -269,3 +270,11 @@ class WorkshopTests(unittest.TestCase):
 		f.db.exists.return_value=True;f.db.get_value.return_value='SNAP'
 		f.get_doc.side_effect=None;f.get_doc.return_value=Document(name='SNAP',fingerprint=module.specification(source.as_dict())[1])
 		with patch.dict(sys.modules,{'erpnext.svoenrav.spec_rules':module}):api._check_specification(source)
+
+
+	def test_prepared_native_document_never_exposes_masked_or_restricted_fields(self):
+		target=Document(doctype='Purchase Receipt',docstatus=0,items=[{'item_code':'L','rate':100}])
+		target._has_fieldlevel_read_restrictions.return_value=True
+		api,f,p,factories=self.api(permissions={('Purchase Order','read'):True,('Purchase Receipt','create'):True},source=Document(name='PO',docstatus=1),target=target)
+		with self.assertRaises(PermissionError):api.prepare_operation('receipt','PO')
+		target.insert.assert_not_called();target.submit.assert_not_called()

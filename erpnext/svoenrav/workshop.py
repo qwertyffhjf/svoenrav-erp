@@ -121,6 +121,11 @@ def prepare_operation(operation, source_name, quantity=None):
 	if target.doctype != spec["target"] or target.docstatus != 0 or not target.is_new():
 		frappe.throw("Ожидался новый черновик документа.", frappe.ValidationError)
 	target.check_permission("create")
+	# The native form can fetch protected values server-side; an unsaved dict
+	# cannot safely carry masked prices or quantities through the short adapter.
+	read_limits = getattr(target, "_has_fieldlevel_read_restrictions", None)
+	if not callable(read_limits) or read_limits():
+		frappe.throw("Короткая форма недоступна при ограничении чтения полей целевого документа. Используйте штатную форму ERPNext.", frappe.PermissionError)
 	if not target.get("items"):
 		frappe.throw("Нет доступных строк для операции. Возможно, документ уже исполнен.", frappe.ValidationError)
 	return target.as_dict()
