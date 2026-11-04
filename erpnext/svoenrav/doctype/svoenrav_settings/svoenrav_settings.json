@@ -7,6 +7,8 @@
   "brand_name",
   "description",
   "brand_colour",
+  "menu_source",
+  "menu_items",
   "actions_json",
   "help_html"
  ],
@@ -32,11 +34,29 @@
    "reqd": 1
   },
   {
+   "fieldname": "menu_source",
+   "fieldtype": "Select",
+   "options": "JSON\nТаблица",
+   "default": "JSON",
+   "label": "Способ настройки меню",
+   "reqd": 1,
+   "description": "При обновлении сохраняется JSON. Перенесите текущее меню кнопкой в таблицу и сохраните форму."
+  },
+  {
+   "fieldname": "menu_items",
+   "fieldtype": "Table",
+   "options": "SVOENRAV Menu Action",
+   "label": "Кнопки меню",
+   "depends_on": "eval:doc.menu_source === \"Таблица\"",
+   "description": "Порядок строк задаёт порядок кнопок. Пустая таблица скрывает все кнопки."
+  },
+  {
    "fieldname": "actions_json",
    "fieldtype": "Code",
    "options": "JSON",
    "label": "Действия на стартовой странице",
-   "description": "Пустое поле включает стандартное меню. JSON: label, description, doctype, mode (list/new), section (quick/modules). operation: receipt/transfer/manufacture/delivery — только для соответствующего нового документа. [] скрывает кнопки."
+   "description": "Пустое поле включает стандартное меню. JSON: label, description, doctype, mode (list/new), section (quick/modules). operation: receipt/transfer/manufacture/delivery — только для соответствующего нового документа. [] скрывает кнопки.",
+   "depends_on": "eval:doc.menu_source !== \"Таблица\""
   },
   {
    "fieldname": "help_html",

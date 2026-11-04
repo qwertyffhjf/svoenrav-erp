@@ -18,6 +18,7 @@ class SvoenravWorkshop {
 	constructor(page) {
 		this.page = page;
 		this.request_id = 0;
+		this.queue_request_id = 0;
 		this.ready = false;
 		this.root = $("<div class='sv-workshop'></div>").appendTo(page.main);
 		this.root.append(`<style>
@@ -37,10 +38,12 @@ class SvoenravWorkshop {
 		this.tabs = $("<nav class='sv-tabs' aria-label='Разделы мастерской'></nav>").appendTo(this.root);
 		this.operation_tab = $("<button class='btn btn-default' type='button'>Операции</button>").appendTo(this.tabs).on("click", () => this.show("operations"));
 		this.order_tab = $("<button class='btn btn-default' type='button'>Карточка заказа</button>").appendTo(this.tabs).on("click", () => this.show("order"));
+		this.queue_tab = $("<button class='btn btn-default' type='button'>Очередь производства</button>").appendTo(this.tabs).on("click", () => this.show("queue"));
 		this.policy_tab = $("<button class='btn btn-default' type='button'>Как учитываются материалы</button>").appendTo(this.tabs).on("click", () => this.show("policy"));
 		this.feedback = $("<div class='sv-feedback text-muted' role='status'></div>").appendTo(this.root);
 		this.operations_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.order_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
+		this.queue_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.policy_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.build_policy();
 		this.show("operations");
@@ -53,6 +56,7 @@ class SvoenravWorkshop {
 			this.options = await frappe.xcall("erpnext.svoenrav.workshop.get_options");
 			this.build_operations();
 			this.build_order();
+			this.build_queue();
 			this.ready = true;
 			this.feedback.empty();
 			this.apply_route();
@@ -64,10 +68,12 @@ class SvoenravWorkshop {
 	show(view) {
 		this.operations_panel.toggle(view === "operations");
 		this.order_panel.toggle(view === "order");
+		this.queue_panel.toggle(view === "queue");
 		this.policy_panel.toggle(view === "policy");
-		for (const [key, button] of [["operations", this.operation_tab], ["order", this.order_tab], ["policy", this.policy_tab]]) {
+		for (const [key, button] of [["operations", this.operation_tab], ["order", this.order_tab], ["queue", this.queue_tab], ["policy", this.policy_tab]]) {
 			button.toggleClass("btn-primary", key === view).attr("aria-pressed", String(key === view));
 		}
+		if (view === "queue" && this.ready && this.options.can_read_work_orders) this.load_queue(this.queue_start || 0);
 	}
 
 	apply_route() {
@@ -77,6 +83,7 @@ class SvoenravWorkshop {
 		if (!["operation", "sales_order", "view"].some((key) => key in route)) return;
 		frappe.route_options = null;
 		if (route.view === "policy") return this.show("policy");
+		if (route.view === "queue") return this.show("queue");
 		if (typeof route.sales_order === "string" && this.order_field) {
 			this.show("order");
 			this.order_field.set_value(route.sales_order);
@@ -259,6 +266,47 @@ class SvoenravWorkshop {
 		if (!section.allowed) return $("<p class='sv-help'></p>").text("Раздел недоступен по правам чтения связанных документов.").appendTo(this.card);
 		this.table(this.card, headings, section.rows.map(build_row));
 		if (section.has_more) $("<p class='sv-help'></p>").text(section.note || "Показаны последние 20 документов. Остальные доступны в полном списке ERPNext.").appendTo(this.card);
+	}
+
+	build_queue() {
+		this.queue_panel.append("<h2>Очередь производства</h2>");
+		$("<p class='sv-help'></p>").text("Порядок: ручной приоритет (меньшее число раньше), затем срок и дата создания. Без ручного приоритета — после заданий с приоритетом. Паузы остаются видимыми на своём месте. Это очередь заданий, а не расчёт загрузки смен.").appendTo(this.queue_panel);
+		if (!this.options.can_read_work_orders) {
+			this.queue_panel.append($("<p></p>").text("Нет права чтения производственных заданий."));
+			return;
+		}
+		$("<button type='button' class='btn btn-default sv-review'>Обновить очередь</button>").appendTo(this.queue_panel).on("click", () => this.load_queue(this.queue_start || 0));
+		this.queue_settings = $("<div></div>").appendTo(this.queue_panel);
+		this.queue_body = $("<div aria-live='polite'></div>").appendTo(this.queue_panel);
+		this.queue_paging = $("<div class='sv-tabs'></div>").appendTo(this.queue_panel);
+	}
+
+	async load_queue(start = 0) {
+		if (!this.queue_body) return;
+		const request = ++this.queue_request_id;
+		this.queue_body.text("Загружаем очередь…");
+		this.queue_paging.empty();
+		this.queue_settings.empty();
+		try {
+			const data = await frappe.xcall("erpnext.svoenrav.production.get_production_queue", {start});
+			if (request !== this.queue_request_id) return;
+			this.queue_start = data.start;
+			this.queue_body.empty();
+			if (data.can_configure) this.queue_settings.append(this.link({name: "Настроить приоритеты и паузы", url: data.settings_url}));
+			$("<p class='sv-help'></p>").text(`Доступно заданий: ${data.total}. Показано: ${data.rows.length}.`).appendTo(this.queue_body);
+			this.table(this.queue_body, ["Приоритет", "Задание", "Изделие", "Готово / план", "Срок", "Состояние", "Причина / примечание"], data.rows.map((row) => [
+				row.priority ?? "Без ручного",
+				this.link(row), row.item_name,
+				`${row.produced_qty ?? 0} / ${row.qty} ${row.stock_uom || ""}`,
+				(row.expected_delivery_date || "Не задан") + (row.overdue ? " · Просрочено" : ""),
+				row.native_stopped ? "Задание остановлено" : row.planning_paused ? "Пауза планирования" : __(row.status),
+				row.reason || "—",
+			]));
+			if (data.start > 0) $("<button type='button' class='btn btn-default'>Назад</button>").appendTo(this.queue_paging).on("click", () => this.load_queue(Math.max(data.start - 50, 0)));
+			if (data.has_more) $("<button type='button' class='btn btn-default'>Следующие 50</button>").appendTo(this.queue_paging).on("click", () => this.load_queue(data.start + 50));
+		} catch (error) {
+			if (request === this.queue_request_id) this.queue_body.text("Не удалось загрузить очередь. Проверьте сообщение ERPNext, права и настройки приоритетов.");
+		}
 	}
 
 	build_policy() {

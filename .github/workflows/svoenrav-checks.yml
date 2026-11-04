@@ -44,7 +44,9 @@ jobs:
         with:
           node-version: '22'
       - name: Check page script syntax
-        run: node --check erpnext/svoenrav/page/svoenrav_workshop/svoenrav_workshop.js
+        run: |
+          node --check erpnext/svoenrav/page/svoenrav_workshop/svoenrav_workshop.js
+          node --check erpnext/svoenrav/doctype/svoenrav_settings/svoenrav_settings.js
       - name: Install isolated DOM test dependencies
         run: npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/svoenrav-ui" jsdom@26.1.0 jquery@3.7.1
       - name: Check interface behavior without ERPNext

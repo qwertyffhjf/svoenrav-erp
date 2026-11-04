@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 import frappe
 from frappe.utils import get_url_to_form, get_url_to_list
 
-from erpnext.svoenrav.menu import normalise_actions, validate_colour
+from erpnext.svoenrav.menu import configured_actions, validate_colour
 from erpnext.svoenrav.flow import OPERATIONS
 
 
@@ -21,7 +21,7 @@ def get_page_context():
 	require_staff()
 	settings = frappe.get_single("SVOENRAV Settings")
 	try:
-		actions = normalise_actions(settings.actions_json)
+		actions = configured_actions(settings)
 		colour = validate_colour(settings.brand_colour)
 	except ValueError:
 		# Fail visibly rather than silently replacing a saved menu with defaults.

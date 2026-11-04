@@ -96,3 +96,81 @@ def normalise_actions(raw):
 			action["defaults"] = dict(defaults)
 		result.append(action)
 	return result
+
+
+EDITOR_OPERATIONS = {
+	"Приёмка": "receipt", "Выдача в производство": "transfer",
+	"Выпуск": "manufacture", "Отгрузка": "delivery",
+}
+
+
+def table_actions(rows):
+	if not isinstance(rows, (list, tuple)) or len(rows) > 30:
+		raise ValueError("В таблице меню допускается не более 30 строк.")
+	result = []
+	for row in rows:
+		if not isinstance(row, dict):
+			raise ValueError("Некорректная строка меню.")
+		if row.get("open_mode", "Список") not in ("Список", "Новый документ"):
+			raise ValueError("Выберите способ открытия: Список или Новый документ.")
+		if row.get("menu_section", "Разделы") not in ("Разделы", "Быстрые действия"):
+			raise ValueError("Выберите раздел меню.")
+		action = {
+			"label": row.get("label"), "description": row.get("description") or "",
+			"doctype": row.get("action_doctype"),
+			"mode": "new" if row.get("open_mode") == "Новый документ" else "list",
+			"section": "quick" if row.get("menu_section") == "Быстрые действия" else "modules",
+		}
+		operation = row.get("guided_operation")
+		if operation:
+			if not isinstance(operation, str) or operation not in EDITOR_OPERATIONS:
+				raise ValueError("Выберите существующую короткую операцию.")
+			action["operation"] = EDITOR_OPERATIONS[operation]
+		if row.get("stock_preset"):
+			action["defaults"] = {"stock_entry_type": row["stock_preset"]}
+		# Validate hidden rows too; turning visibility on must not reveal bad config.
+		action = normalise_actions([action])[0]
+		enabled = row.get("enabled", 1)
+		if enabled not in (0, 1, "0", "1"):
+			raise ValueError("Видимость кнопки задаётся флажком.")
+		if enabled in (1, "1"):
+			result.append(action)
+	return result
+
+
+def resolve_actions(raw, source=None, rows=None):
+	if source in (None, "", "JSON"):
+		return normalise_actions(raw)
+	if source == "Таблица":
+		return table_actions(rows or [])
+	raise ValueError("Источник меню: JSON или Таблица.")
+
+
+def actions_to_rows(actions):
+	names = {value: key for key, value in EDITOR_OPERATIONS.items()}
+	return [{
+		"enabled": 1, "label": action["label"], "description": action["description"],
+		"action_doctype": action["doctype"],
+		"open_mode": "Новый документ" if action["mode"] == "new" else "Список",
+		"menu_section": "Быстрые действия" if action.get("section") == "quick" else "Разделы",
+		"guided_operation": names.get(action.get("operation"), ""),
+		"stock_preset": action.get("defaults", {}).get("stock_entry_type", ""),
+	} for action in normalise_actions(actions)]
+
+
+def configured_actions(settings):
+	rows = [row.as_dict() if hasattr(row, "as_dict") else row for row in (getattr(settings, "menu_items", None) or [])]
+	return resolve_actions(getattr(settings, "actions_json", None), getattr(settings, "menu_source", None), rows)
+
+
+def editor_rows(settings):
+	rows = [row.as_dict() if hasattr(row, "as_dict") else row for row in (getattr(settings, "menu_items", None) or [])]
+	if getattr(settings, "menu_source", None) != "Таблица":
+		return actions_to_rows(configured_actions(settings))
+	table_actions(rows)
+	result = []
+	for row in rows:
+		item = actions_to_rows(table_actions([{**row, "enabled": 1}]))[0]
+		item["enabled"] = 1 if row.get("enabled", 1) in (1, "1") else 0
+		result.append(item)
+	return result

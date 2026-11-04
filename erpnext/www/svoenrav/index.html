@@ -42,11 +42,12 @@
   <nav class="sv-nav" aria-label="Главное меню">
    <a href="#sv-home">Главная</a>
    <a href="{{ workshop_url | e }}">Быстрые операции</a>
+   {% if can_read_work_orders %}<a href="{{ workshop_url | e }}?view=queue">Очередь производства</a>{% endif %}
    {% if can_read_orders %}<a href="{{ workshop_url | e }}?view=order">Карточка заказа</a>{% endif %}
    <a href="{{ workshop_url | e }}?view=policy">Учёт материалов</a>
    {% if quick_actions %}<a href="#sv-quick">Быстрые действия</a>{% endif %}
    {% if module_actions %}<a href="#sv-modules">Разделы мастерской</a>{% endif %}
-   {% if can_read_work_orders %}<a href="#sv-jobs">В производстве</a>{% endif %}
+   {% if can_read_work_orders %}<a href="#sv-jobs">Ближайшие сроки</a>{% endif %}
    {% if can_configure %}<a href="{{ settings_url | e }}">Настройки</a>{% endif %}
   </nav>
   <div class="sv-main">
@@ -77,7 +78,8 @@
    {% if not actions %}<p class="sv-empty">Нет доступных действий. Проверьте меню и права пользователя.</p>{% endif %}
    {% if can_read_work_orders %}
    <section class="sv-section" id="sv-jobs" aria-labelledby="sv-jobs-heading">
-    <h2 id="sv-jobs-heading">В производстве</h2>
+    <h2 id="sv-jobs-heading">В производстве · ближайшие сроки</h2>
+    <p class="sv-hint">Ручные приоритеты и паузы показаны в <a href="{{ workshop_url | e }}?view=queue">очереди производства</a>.</p>
     <div class="sv-jobs">
      {% for job in work_orders %}
      <a class="sv-job" href="{{ job.url | e }}">

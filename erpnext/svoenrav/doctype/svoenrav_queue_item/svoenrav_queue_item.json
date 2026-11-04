@@ -1,0 +1,53 @@
+{
+ "doctype": "DocType",
+ "name": "SVOENRAV Queue Item",
+ "module": "SVOENRAV",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "work_order",
+  "priority",
+  "paused",
+  "reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "work_order",
+   "fieldtype": "Link",
+   "options": "Work Order",
+   "label": "Производственное задание",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "priority",
+   "fieldtype": "Int",
+   "label": "Приоритет",
+   "in_list_view": 1,
+   "description": "Меньше число — раньше. 0 или пусто — без ручного приоритета."
+  },
+  {
+   "fieldname": "paused",
+   "fieldtype": "Check",
+   "label": "Пауза планирования",
+   "default": "0",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Причина / примечание",
+   "mandatory_depends_on": "eval:doc.paused",
+   "in_list_view": 1
+  }
+ ],
+ "permissions": [],
+ "actions": [],
+ "links": [],
+ "states": [],
+ "owner": "Administrator",
+ "modified_by": "Administrator",
+ "creation": "2026-11-04 00:00:00",
+ "modified": "2026-11-04 00:00:00"
+}

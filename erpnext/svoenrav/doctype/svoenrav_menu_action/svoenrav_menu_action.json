@@ -1,0 +1,88 @@
+{
+ "doctype": "DocType",
+ "name": "SVOENRAV Menu Action",
+ "module": "SVOENRAV",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "label",
+  "action_doctype",
+  "open_mode",
+  "menu_section",
+  "description",
+  "guided_operation",
+  "stock_preset"
+ ],
+ "fields": [
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Показывать",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "label": "Название кнопки",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "action_doctype",
+   "fieldtype": "Link",
+   "options": "DocType",
+   "label": "Документ",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "open_mode",
+   "fieldtype": "Select",
+   "options": "Список\nНовый документ",
+   "label": "Открывать",
+   "default": "Список",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "menu_section",
+   "fieldtype": "Select",
+   "options": "Разделы\nБыстрые действия",
+   "label": "Раздел меню",
+   "default": "Разделы",
+   "reqd": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Пояснение"
+  },
+  {
+   "fieldname": "guided_operation",
+   "fieldtype": "Select",
+   "options": "\nПриёмка\nВыдача в производство\nВыпуск\nОтгрузка",
+   "label": "Короткая форма",
+   "description": "Только для нового документа соответствующего типа."
+  },
+  {
+   "fieldname": "stock_preset",
+   "fieldtype": "Select",
+   "options": "\nMaterial Issue\nMaterial Receipt\nMaterial Transfer",
+   "label": "Тип прямой складской операции",
+   "description": "Только для нового Stock Entry, без короткой формы."
+  }
+ ],
+ "permissions": [],
+ "links": [],
+ "actions": [],
+ "states": [],
+ "creation": "2026-11-04 00:00:00",
+ "modified": "2026-11-04 00:00:00",
+ "owner": "Administrator",
+ "modified_by": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

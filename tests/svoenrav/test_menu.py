@@ -73,3 +73,48 @@ class MenuTests(unittest.TestCase):
 		for value in ["red", "#fff", "#000000;background:url(x)", 123]:
 			with self.subTest(value=value), self.assertRaises(ValueError):
 				menu.validate_colour(value)
+
+
+class MenuEditorTests(unittest.TestCase):
+	def test_default_actions_roundtrip_through_table(self):
+		actions = menu.normalise_actions(None)
+		rows = menu.actions_to_rows(actions)
+		self.assertEqual(menu.table_actions(rows), [{**action, "section": action.get("section", "modules")} for action in actions])
+
+	def test_visibility_and_order_follow_table(self):
+		rows = menu.actions_to_rows(menu.normalise_actions(None))[:3]
+		rows[1]["enabled"] = 0
+		rows.reverse()
+		self.assertEqual([row["label"] for row in menu.table_actions(rows)], [rows[0]["label"], rows[2]["label"]])
+
+	def test_explicit_table_source_does_not_fall_back_to_legacy_json(self):
+		self.assertEqual(menu.resolve_actions("not JSON", "Таблица", []), [])
+		rows = menu.actions_to_rows(menu.normalise_actions(None))[:1]
+		self.assertEqual(menu.resolve_actions("[]", "Таблица", rows)[0]["label"], "Новый заказ")
+
+	def test_legacy_source_ignores_unselected_table_and_preserves_empty_menu(self):
+		self.assertEqual(menu.resolve_actions("[]", None, [None]), [])
+		self.assertEqual(menu.resolve_actions(None, "JSON", []), menu.normalise_actions(None))
+		with self.assertRaises(ValueError):
+			menu.resolve_actions("[]", "unknown", [])
+
+	def test_disabled_rows_cannot_store_arbitrary_operations(self):
+		row = menu.actions_to_rows(menu.normalise_actions(None))[1]
+		for extra in ({"enabled": 2}, {"guided_operation": "delete"}, {"action_doctype": "javascript:alert(1)"}, {"open_mode": "Удалить"}, {"menu_section": "unknown"}, {"guided_operation": ["Выпуск"]}):
+			with self.subTest(extra=extra), self.assertRaises(ValueError):
+				menu.table_actions([{**row, "enabled": 0, **extra}])
+
+	def test_saved_json_presets_survive_table_conversion(self):
+		actions = menu.normalise_actions([{"label": "Списание", "doctype": "Stock Entry", "mode": "new", "defaults": {"stock_entry_type": "Material Issue"}}])
+		self.assertEqual(menu.table_actions(menu.actions_to_rows(actions))[0]["defaults"], actions[0]["defaults"])
+
+	def test_editor_copy_keeps_disabled_rows_without_metadata(self):
+		from types import SimpleNamespace
+		rows = menu.actions_to_rows(menu.normalise_actions(None))[:2]
+		rows[1].update({"enabled":0,"name":"private-child-name","owner":"private-owner"})
+		settings = SimpleNamespace(menu_source="Таблица",menu_items=rows,actions_json="unchanged")
+		result = menu.editor_rows(settings)
+		self.assertEqual(len(result),2)
+		self.assertEqual(result[1]["enabled"],0)
+		self.assertNotIn("owner",result[1])
+		self.assertEqual(settings.actions_json,"unchanged")
