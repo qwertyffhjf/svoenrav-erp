@@ -5,6 +5,8 @@ on:
       - 'erpnext/svoenrav/**'
       - 'erpnext/www/svoenrav/**'
       - 'tools/svoenrav.py'
+      - 'tools/build_svoenrav_preview.py'
+      - 'SVOENRAV_PREVIEW.html'
       - 'tests/svoenrav/**'
       - 'svoenrav/**'
       - '.github/workflows/svoenrav-checks.yml'
@@ -13,6 +15,8 @@ on:
       - 'erpnext/svoenrav/**'
       - 'erpnext/www/svoenrav/**'
       - 'tools/svoenrav.py'
+      - 'tools/build_svoenrav_preview.py'
+      - 'SVOENRAV_PREVIEW.html'
       - 'tests/svoenrav/**'
       - 'svoenrav/**'
       - '.github/workflows/svoenrav-checks.yml'
@@ -31,6 +35,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '${{ matrix.python-version }}'
+      - name: Install preview renderer
+        run: python -m pip install Jinja2==3.1.6
+      - name: Check standalone preview matches sources
+        run: python tools/build_svoenrav_preview.py --check
       - name: Check source metadata without Docker
         run: python tools/svoenrav.py check --source-only
       - name: Test SVOENRAV helpers without installing ERPNext
@@ -47,7 +55,10 @@ jobs:
         run: |
           node --check erpnext/svoenrav/page/svoenrav_workshop/svoenrav_workshop.js
           node --check erpnext/svoenrav/doctype/svoenrav_settings/svoenrav_settings.js
+          node --check svoenrav/preview/adapter.js
       - name: Install isolated DOM test dependencies
         run: npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/svoenrav-ui" jsdom@26.1.0 jquery@3.7.1
       - name: Check interface behavior without ERPNext
-        run: NODE_PATH="$RUNNER_TEMP/svoenrav-ui/node_modules" node tests/svoenrav/workshop_ui.cjs
+        run: |
+          NODE_PATH="$RUNNER_TEMP/svoenrav-ui/node_modules" node tests/svoenrav/workshop_ui.cjs
+          NODE_PATH="$RUNNER_TEMP/svoenrav-ui/node_modules" node tests/svoenrav/preview_ui.cjs

@@ -20,7 +20,7 @@ async function setup() {
 	const calls = [];
 	const routes = [];
 	let handler = async (method) => {
-		if (method.endsWith("get_options")) return {operations, can_read_orders:true, can_read_work_orders:true};
+		if (method.endsWith("get_options")) return {operations, can_read_orders:true, can_read_work_orders:true, can_cutting:true};
 		throw new Error("Unexpected API: " + method);
 	};
 	dom.window.$ = $;
@@ -75,10 +75,18 @@ function card(name, text="Сумка") {
 		const second = ui.page.prepare();
 		assert.equal(ui.calls.filter((row)=>row.method.endsWith("prepare_operation")).length,1,"Repeated click must not dispatch a second request");
 		assert.equal(ui.page.prepare_button.prop("disabled"),true);
-		finish({doctype:"Stock Entry",name:"new-stock-entry-1"});
+		finish({doctype:"Stock Entry",name:"new-stock-entry-1",docstatus:0,company:"TEST",items:[{item_name:"Кожа",qty:2,uom:"дм²",s_warehouse:"MAIN",t_warehouse:"WIP"}]});
 		await Promise.all([first,second]);
 		assert.equal(ui.page.prepare_button.prop("disabled"),false);
 		assert.deepEqual(JSON.parse(JSON.stringify(ui.calls.at(-1).args)),{operation:"manufacture",source_name:"WO-1",quantity:2});
+		assert.equal(ui.routes.length,0,"Preparation must stop at the review screen");
+		assert.match(ui.page.operation_review.text(),/Кожа/);
+		ui.page.operation_review_controls.open.trigger("click");
+		await turn();
+		assert.equal(ui.routes.length,0,"Unchecked review must not open the document");
+		ui.page.operation_review_controls.checkbox.prop("checked",true).trigger("change");
+		ui.page.operation_review_controls.open.trigger("click");
+		await turn();
 		assert.equal(ui.routes[0][0],"Form");
 		assert.equal(ui.routes[0][1],"Stock Entry");
 
@@ -177,6 +185,25 @@ function card(name, text="Сумка") {
 		await ui.page.load_materials();
 		assert.match(ui.page.material_body.text(),/Проверка не выполнена/);
 		assert.equal(ui.page.material_body.find("table").length,0,"An error must not leave an old successful report visible");
+
+		ui.page.source_field.set_value("WO-STALE");
+		let finish_review;
+		ui.setHandler(()=>new Promise((resolve)=>{finish_review=resolve;}));
+		const stale_review=ui.page.prepare();
+		ui.page.quantity_field.set_value(3);
+		finish_review({doctype:"Stock Entry",name:"new-old",docstatus:0,items:[]});
+		await stale_review;
+		assert.equal(ui.page.operation_review.children().length,0,"Changing inputs must discard an old prepared document");
+		assert.equal(ui.page.operation_review_controls,null);
+
+		const cutting={work_order:"WO-1",material:"LEATHER",area_unit:"дм²",input_area:20,used_area:12,reusable_area:6,waste_area:2,notes:""};
+		for(const[key,value]of Object.entries(cutting))await ui.page.cutting_fields[key].set_value(value);
+		ui.setHandler(async()=>({document:{...cutting,doctype:"SVOENRAV Cutting Draft",name:"new-cut",docstatus:0,company:"TEST",yield_percent:60},posted:false}));
+		await ui.page.evaluate_cutting();
+		assert.match(ui.page.cutting_review.text(),/без складских движений/);
+		assert.match(ui.page.cutting_review.text(),/60%/);
+		ui.page.cutting_fields.used_area.set_value(13);
+		assert.equal(ui.page.cutting_review.children().length,0,"Editing a cutting quantity must clear the previous check");
 
 		ui.page.options.operations=[];
 		ui.dom.window.frappe.route_options={operation:"delete"};

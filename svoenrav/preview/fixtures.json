@@ -1,0 +1,15 @@
+{
+  "notice": "ВСЕ ДАННЫЕ ТЕСТОВЫЕ. Не являются данными мастерской SVOENRAV.",
+  "company": "ДЕМО — тестовая мастерская",
+  "work_order": {"name":"DEMO-WO-001","item_name":"Тестовая сумка","production_item":"DEMO-BAG","qty":5,"produced_qty":1,"material_transferred_for_manufacturing":2,"docstatus":1,"status":"In Process","expected_delivery_date":"2026-11-10","stock_uom":"шт","creation":"2026-11-01 09:00:00"},
+  "sales_order": {"name":"DEMO-SO-001","customer_name":"Тестовый покупатель","status":"To Deliver and Bill","docstatus":1,"delivery_date":"2026-11-10","currency":"RUB","grand_total":50000,"advance_paid":10000,"per_delivered":20,"per_billed":0},
+  "purchase_order": "DEMO-PO-001",
+  "material": "DEMO-LEATHER",
+  "material_name": "Тестовая кожа",
+  "warehouse": "DEMO-MAIN",
+  "wip_warehouse": "DEMO-WIP",
+  "fg_warehouse": "DEMO-FG",
+  "material_rows": [{"name":"DEMO-WOI-001","item_code":"DEMO-LEATHER","item_name":"Тестовая кожа","source_warehouse":"DEMO-MAIN","stock_uom":"дм²","required_qty":50,"transferred_qty":20,"consumed_qty":10,"returned_qty":0,"stock_reserved_qty":10}],
+  "balance": {"known":true,"actual_qty":60,"reserved_stock":40,"own_reserved":10,"reservations_known":true,"stock_uom":"дм²"},
+  "cutting": {"work_order":"DEMO-WO-001","material":"DEMO-LEATHER","skin_reference":"ТЕСТ-КУСОК-01","area_unit":"дм²","input_area":20,"used_area":12,"reusable_area":6,"waste_area":2,"notes":"Вымышленный пример для проверки интерфейса"}
+}

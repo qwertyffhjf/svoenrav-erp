@@ -43,6 +43,7 @@ def get_options():
 		"operations": [{"key": key, **spec} for key, spec in OPERATIONS.items() if _available(spec)],
 		"can_read_orders": bool(frappe.has_permission("Sales Order", ptype="read")),
 		"can_read_work_orders": bool(frappe.has_permission("Work Order", ptype="read")),
+		"can_cutting": bool(frappe.has_permission("Work Order", ptype="read") and frappe.has_permission("Item", ptype="read") and frappe.has_permission("SVOENRAV Cutting Draft", ptype="create")),
 	}
 
 

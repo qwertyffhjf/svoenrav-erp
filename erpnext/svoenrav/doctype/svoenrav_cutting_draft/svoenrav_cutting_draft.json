@@ -1,0 +1,140 @@
+{
+ "doctype": "DocType",
+ "name": "SVOENRAV Cutting Draft",
+ "module": "SVOENRAV",
+ "autoname": "format:SVCUT-{#####}",
+ "engine": "InnoDB",
+ "is_submittable": 0,
+ "track_changes": 1,
+ "field_order": [
+  "help_html",
+  "work_order",
+  "material",
+  "company",
+  "skin_reference",
+  "area_unit",
+  "input_area",
+  "used_area",
+  "reusable_area",
+  "waste_area",
+  "consumed_area",
+  "yield_percent",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "help_html",
+   "fieldtype": "HTML",
+   "options": "<p>Карточка фиксирует измерения раскроя. Сохранение не списывает материал, не возвращает остатки на склад и не создаёт бухгалтерских проводок. Все площади указываются в одной выбранной единице.</p>"
+  },
+  {
+   "fieldname": "work_order",
+   "fieldtype": "Link",
+   "options": "Work Order",
+   "label": "Производственное задание",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "material",
+   "fieldtype": "Link",
+   "options": "Item",
+   "label": "Материал",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "options": "Company",
+   "label": "Компания",
+   "read_only": 1
+  },
+  {
+   "fieldname": "skin_reference",
+   "fieldtype": "Data",
+   "label": "Метка шкуры / куска"
+  },
+  {
+   "fieldname": "area_unit",
+   "fieldtype": "Select",
+   "options": "\nдм²\nм²\nсм²",
+   "label": "Единица площади",
+   "reqd": 1
+  },
+  {
+   "fieldname": "input_area",
+   "fieldtype": "Float",
+   "precision": "6",
+   "label": "Исходная площадь",
+   "reqd": 1
+  },
+  {
+   "fieldname": "used_area",
+   "fieldtype": "Float",
+   "precision": "6",
+   "label": "Площадь деталей",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reusable_area",
+   "fieldtype": "Float",
+   "precision": "6",
+   "label": "Пригодный остаток",
+   "reqd": 1
+  },
+  {
+   "fieldname": "waste_area",
+   "fieldtype": "Float",
+   "precision": "6",
+   "label": "Отходы",
+   "reqd": 1
+  },
+  {
+   "fieldname": "consumed_area",
+   "fieldtype": "Float",
+   "precision": "6",
+   "label": "Детали и отходы, площадь",
+   "read_only": 1
+  },
+  {
+   "fieldname": "yield_percent",
+   "fieldtype": "Percent",
+   "precision": "4",
+   "label": "Выход деталей, %",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Примечание"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Manufacturing Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Manufacturing User",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  }
+ ],
+ "actions": [],
+ "links": [],
+ "states": [],
+ "owner": "Administrator",
+ "modified_by": "Administrator",
+ "creation": "2026-11-04 00:00:00",
+ "modified": "2026-11-04 00:00:00"
+}

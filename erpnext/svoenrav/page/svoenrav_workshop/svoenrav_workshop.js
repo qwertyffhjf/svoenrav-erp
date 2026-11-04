@@ -20,6 +20,8 @@ class SvoenravWorkshop {
 		this.request_id = 0;
 		this.queue_request_id = 0;
 		this.material_request_id = 0;
+		this.operation_revision = 0;
+		this.cutting_revision = 0;
 		this.ready = false;
 		this.root = $("<div class='sv-workshop'></div>").appendTo(page.main);
 		this.root.append(`<style>
@@ -41,12 +43,14 @@ class SvoenravWorkshop {
 		this.order_tab = $("<button class='btn btn-default' type='button'>Карточка заказа</button>").appendTo(this.tabs).on("click", () => this.show("order"));
 		this.queue_tab = $("<button class='btn btn-default' type='button'>Очередь производства</button>").appendTo(this.tabs).on("click", () => this.show("queue"));
 		this.material_tab = $("<button class='btn btn-default' type='button'>Материалы задания</button>").appendTo(this.tabs).on("click", () => this.show("materials"));
+		this.cutting_tab = $("<button class='btn btn-default' type='button'>Раскрой</button>").appendTo(this.tabs).on("click", () => this.show("cutting"));
 		this.policy_tab = $("<button class='btn btn-default' type='button'>Как учитываются материалы</button>").appendTo(this.tabs).on("click", () => this.show("policy"));
 		this.feedback = $("<div class='sv-feedback text-muted' role='status'></div>").appendTo(this.root);
 		this.operations_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.order_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.queue_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.material_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
+		this.cutting_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.policy_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.build_policy();
 		this.show("operations");
@@ -61,6 +65,7 @@ class SvoenravWorkshop {
 			this.build_order();
 			this.build_queue();
 			this.build_materials();
+			this.build_cutting();
 			this.ready = true;
 			this.feedback.empty();
 			this.apply_route();
@@ -74,8 +79,9 @@ class SvoenravWorkshop {
 		this.order_panel.toggle(view === "order");
 		this.queue_panel.toggle(view === "queue");
 		this.material_panel.toggle(view === "materials");
+		this.cutting_panel.toggle(view === "cutting");
 		this.policy_panel.toggle(view === "policy");
-		for (const [key, button] of [["operations", this.operation_tab], ["order", this.order_tab], ["queue", this.queue_tab], ["materials", this.material_tab], ["policy", this.policy_tab]]) {
+		for (const [key, button] of [["operations", this.operation_tab], ["order", this.order_tab], ["queue", this.queue_tab], ["materials", this.material_tab], ["cutting", this.cutting_tab], ["policy", this.policy_tab]]) {
 			button.toggleClass("btn-primary", key === view).attr("aria-pressed", String(key === view));
 		}
 		if (view === "queue" && this.ready && this.options.can_read_work_orders) this.load_queue(this.queue_start || 0);
@@ -89,6 +95,7 @@ class SvoenravWorkshop {
 		frappe.route_options = null;
 		if (typeof route.work_order === "string" && this.material_field) return this.open_materials(route.work_order);
 		if (route.view === "materials") return this.show("materials");
+		if (route.view === "cutting") return this.show("cutting");
 		if (route.view === "policy") return this.show("policy");
 		if (route.view === "queue") return this.show("queue");
 		if (typeof route.sales_order === "string" && this.order_field) {
@@ -124,18 +131,20 @@ class SvoenravWorkshop {
 		const qty_host = $("<div class='sv-quantity'></div>").appendTo(this.operations_panel);
 		this.quantity_field = frappe.ui.form.make_control({
 			parent: qty_host,
-			df: {fieldtype: "Float", label: "Количество готовых изделий", fieldname: "quantity", description: "В единицах изделия из производственного задания; для передачи — на какое количество изделий выдаём материалы."},
+			df: {fieldtype: "Float", label: "Количество готовых изделий", fieldname: "quantity", description: "В единицах изделия из производственного задания; для передачи — на какое количество изделий выдаём материалы.", onchange: () => this.invalidate_review()},
 			render_input: true,
 		});
 		this.operation_help = $("<p class='sv-help'></p>").appendTo(this.operations_panel);
 		this.prepare_button = $("<button type='button' class='btn btn-primary sv-review'>Подготовить документ</button>")
 			.appendTo(this.operations_panel).on("click", () => this.prepare());
+		this.operation_review = $("<div aria-live='polite'></div>").appendTo(this.operations_panel);
 		this.operation_field.set_value(this.options.operations[0].key);
 		this.change_operation();
 	}
 
 	change_operation() {
 		if (!this.quantity_field) return;
+		this.invalidate_review();
 		const spec = this.options.operations.find((row) => row.key === this.operation_field.get_value());
 		if (!spec) return;
 		this.source_host.empty();
@@ -144,7 +153,7 @@ class SvoenravWorkshop {
 		const labels = {"Purchase Order": "Заказ поставщику", "Work Order": "Производственное задание", "Sales Order": "Заказ покупателя"};
 		this.source_field = frappe.ui.form.make_control({
 			parent: this.source_host,
-			df: {fieldtype: "Link", label: labels[spec.source], options: spec.source, fieldname: "source", reqd: 1, get_query: () => ({filters: {docstatus: 1, status: ["not in", ["Stopped", "Closed", "Completed", "Cancelled", "On Hold"]]}})},
+			df: {fieldtype: "Link", label: labels[spec.source], options: spec.source, fieldname: "source", reqd: 1, onchange: () => this.invalidate_review(), get_query: () => ({filters: {docstatus: 1, status: ["not in", ["Stopped", "Closed", "Completed", "Cancelled", "On Hold"]]}})},
 			render_input: true,
 		});
 		this.quantity_field.$wrapper.toggle(is_production);
@@ -167,15 +176,120 @@ class SvoenravWorkshop {
 		this.preparing = true;
 		this.feedback.empty();
 		this.prepare_button.prop("disabled", true);
+		this.operation_review.empty();
+		const revision = this.operation_revision;
 		try {
 			const doc = await frappe.xcall("erpnext.svoenrav.workshop.prepare_operation", args);
-			const docs = frappe.model.sync(doc);
-			await frappe.set_route("Form", docs[0].doctype, docs[0].name);
+			if (revision !== this.operation_revision) return;
+			this.operation_review_controls = this.render_review(this.operation_review, doc, spec, () => revision === this.operation_revision, source);
 		} catch (error) {
 			this.feedback.text("Документ не подготовлен. Проверьте сообщение ERPNext и исходные данные.");
 		} finally {
 			this.preparing = false;
 			this.prepare_button.prop("disabled", false);
+		}
+	}
+
+	invalidate_review() {
+		this.operation_revision++;
+		if (this.operation_review) this.operation_review.empty();
+		this.operation_review_controls = null;
+	}
+
+	render_review(host, doc, spec, is_current, source) {
+		if (doc.doctype !== spec.target || doc.docstatus !== 0) throw new Error("Ожидался новый документ нужного типа");
+		host.empty();
+		$("<h3></h3>").text("Проверка: " + spec.label).appendTo(host);
+		$("<p></p>").text("Источник: " + source + " · Компания: " + (doc.company || "не задана")).appendTo(host);
+		if (spec.key === "cutting") {
+			this.table(host, ["Часть раскроя", "Площадь", "Единица"], [
+				["Исходный материал", doc.input_area, doc.area_unit], ["Детали", doc.used_area, doc.area_unit],
+				["Пригодный остаток", doc.reusable_area, doc.area_unit], ["Отходы", doc.waste_area, doc.area_unit],
+			]);
+			$("<p class='sv-help'></p>").text(`Баланс сходится. Выход деталей: ${doc.yield_percent}%. Карточка не создаёт складских движений и проводок.`).appendTo(host);
+		} else {
+			this.table(host, ["Позиция", "Количество", "Единица", "Откуда", "Куда"], (doc.items || []).map((row) => [
+				row.item_name || row.item_code, row.qty, row.uom || row.stock_uom,
+				row.s_warehouse || doc.from_warehouse || (spec.key === "delivery" ? row.warehouse : null),
+				row.t_warehouse || doc.to_warehouse || (spec.key === "receipt" ? row.warehouse : null),
+			]));
+			$("<p class='sv-help'></p>").text("Это предварительная проверка. Количества строк, склады, партии и фактический расход можно уточнить в стандартном документе. Сохранение и проведение выполняются отдельно в ERPNext.").appendTo(host);
+		}
+		const label = $("<label style='display:block;margin-top:16px'></label>").appendTo(host);
+		const checkbox = $("<input type='checkbox'>").appendTo(label);
+		label.append(document.createTextNode(" Проверил данные подготовленного документа"));
+		const open = $("<button type='button' class='btn btn-primary sv-review' disabled>Открыть документ ERPNext</button>").appendTo(host);
+		checkbox.on("change", () => open.prop("disabled", !checkbox.prop("checked")));
+		open.on("click", async () => {
+			if (!checkbox.prop("checked") || !is_current()) return;
+			open.prop("disabled", true);
+			try {
+				const docs = frappe.model.sync(doc);
+				await frappe.set_route("Form", docs[0].doctype, docs[0].name);
+			} finally {
+				open.prop("disabled", false);
+			}
+		});
+		return {checkbox, open};
+	}
+
+	build_cutting() {
+		this.cutting_panel.append("<h2>Карточка фактического раскроя</h2>");
+		$("<p class='sv-help'></p>").text("Учёт измерений: исходная площадь = детали + пригодный остаток + отходы. Это карточка без автоматического списания кожи и возврата на склад. Все площади вводятся в одной выбранной единице.").appendTo(this.cutting_panel);
+		if (!this.options.can_cutting) {
+			this.cutting_panel.append($("<p></p>").text("Требуются права чтения задания и материала и создания карточки раскроя."));
+			return;
+		}
+		this.cutting_fields = {};
+		const controls = $("<div class='sv-controls'></div>").appendTo(this.cutting_panel);
+		const definitions = [
+			{fieldname:"work_order",label:"Производственное задание",fieldtype:"Link",options:"Work Order",reqd:1},
+			{fieldname:"material",label:"Материал из задания",fieldtype:"Link",options:"Item",reqd:1},
+			{fieldname:"skin_reference",label:"Метка шкуры / куска",fieldtype:"Data"},
+			{fieldname:"area_unit",label:"Единица площади",fieldtype:"Select",options:"\nдм²\nм²\nсм²",reqd:1},
+			{fieldname:"input_area",label:"Исходная площадь",fieldtype:"Float",precision:6,reqd:1},
+			{fieldname:"used_area",label:"Площадь деталей",fieldtype:"Float",precision:6,reqd:1,default:0},
+			{fieldname:"reusable_area",label:"Пригодный остаток",fieldtype:"Float",precision:6,reqd:1,default:0},
+			{fieldname:"waste_area",label:"Отходы",fieldtype:"Float",precision:6,reqd:1,default:0},
+			{fieldname:"notes",label:"Примечание",fieldtype:"Small Text"},
+		];
+		for (const df of definitions) {
+			this.cutting_fields[df.fieldname] = frappe.ui.form.make_control({
+				parent: $("<div></div>").appendTo(controls),
+				df:{...df,onchange:()=>{this.cutting_revision++;if(this.cutting_review)this.cutting_review.empty();}},render_input:true,
+			});
+		}
+		$("<button type='button' class='btn btn-default sv-review'>Считать оставшуюся площадь отходами</button>").appendTo(this.cutting_panel).on("click", () => {
+			const input = Number(this.cutting_fields.input_area.get_value());
+			const used = Number(this.cutting_fields.used_area.get_value());
+			const reusable = Number(this.cutting_fields.reusable_area.get_value());
+			const rest = Math.round((input - used - reusable) * 1000000) / 1000000;
+			if (![input,used,reusable,rest].every(Number.isFinite) || input <= 0 || used < 0 || reusable < 0 || rest < 0) return frappe.msgprint("Проверьте исходную площадь, площадь деталей и пригодного остатка.");
+			this.cutting_fields.waste_area.set_value(rest);
+		});
+		this.cutting_button = $("<button type='button' class='btn btn-primary sv-review'>Проверить раскрой</button>").appendTo(this.cutting_panel).on("click", () => this.evaluate_cutting());
+		this.cutting_review = $("<div aria-live='polite'></div>").appendTo(this.cutting_panel);
+	}
+
+	async evaluate_cutting() {
+		if (this.cutting_busy) return;
+		const args = {};
+		for (const [key,control] of Object.entries(this.cutting_fields)) args[key] = control.get_value();
+		args.skin_reference = args.skin_reference || "";
+		args.notes = args.notes || "";
+		const revision = this.cutting_revision;
+		this.cutting_busy = true;
+		this.cutting_button.prop("disabled",true);
+		this.cutting_review.empty();
+		try {
+			const result = await frappe.xcall("erpnext.svoenrav.cutting.evaluate_cutting",args);
+			if (revision !== this.cutting_revision) return;
+			this.cutting_review_controls = this.render_review(this.cutting_review,result.document,{key:"cutting",label:"Раскрой без складских движений",target:"SVOENRAV Cutting Draft"},()=>revision === this.cutting_revision,args.work_order);
+		} catch(error) {
+			if (revision === this.cutting_revision) this.cutting_review.text("Раскрой не подтверждён. Проверьте сообщение ERPNext, единицу и баланс площадей.");
+		} finally {
+			this.cutting_busy = false;
+			this.cutting_button.prop("disabled",false);
 		}
 	}
 
@@ -230,7 +344,7 @@ class SvoenravWorkshop {
 		const a = document.createElement("a");
 		a.textContent = row.name;
 		// Only local Desk URLs are accepted even though the server builds them.
-		const url = new URL(row.url, window.location.origin);
+		const url = new URL(row.url, window.location.href);
 		if (url.origin === window.location.origin && /^\/(desk|app)\//.test(url.pathname)) a.href = url.href;
 		return a;
 	}
