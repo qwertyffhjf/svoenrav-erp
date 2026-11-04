@@ -12,6 +12,7 @@ class Document(dict):
 	def __init__(self, **values):
 		super().__init__(values)
 		self.check_permission = Mock()
+		self.apply_fieldlevel_read_permissions = Mock()
 		self.insert = Mock()
 		self.save = Mock()
 		self.submit = Mock()
@@ -36,7 +37,7 @@ def setup_api(*, permissions=None, source=None, target=None):
 	frappe.PermissionError = PermissionError
 	frappe.throw = Mock(side_effect=lambda message, error=ValueError: (_ for _ in ()).throw(error(message)))
 	frappe.whitelist = lambda *args, **kwargs: lambda fn: fn
-	frappe.has_permission = Mock(side_effect=lambda doctype, ptype="read": permissions.get((doctype, ptype), False))
+	frappe.has_permission = Mock(side_effect=lambda doctype, ptype="read": permissions.get((doctype, ptype), permissions.get((doctype, "create"), False) if ptype == "read" and doctype in ("Stock Entry", "Purchase Receipt", "Delivery Note") else False))
 	frappe.get_list = Mock(return_value=[])
 	frappe.db = Mock()
 	frappe.db.get_single_value.return_value = False
@@ -203,3 +204,58 @@ class WorkshopTests(unittest.TestCase):
 		self.assertEqual(result["stock"]["rows"], [])
 		self.assertTrue(result["stock"]["note"])
 		self.assertNotIn("Stock Entry", [call.args[0] for call in frappe.get_list.call_args_list])
+
+	def test_existing_draft_stops_factory_and_has_no_stock_side_effects(self):
+		source=self.work_order()
+		api,f,p,factories=self.api(permissions={("Work Order","read"):True,("Stock Entry","create"):True},source=source)
+		f.get_list.return_value=[{"name":"SE-DRAFT","docstatus":0}]
+		result=api.prepare_operation("transfer","WO-1",1)
+		self.assertEqual(result["existing_drafts"]["rows"][0]["name"],"SE-DRAFT")
+		self.assertEqual(f.get_list.call_args.kwargs['filters'],{"work_order":"WO-1","purpose":"Material Transfer for Manufacture","docstatus":0})
+		factories['make_stock_entry'].assert_not_called()
+
+	def test_short_path_requires_read_permission_for_draft_detection(self):
+		api,f,p,factories=self.api(permissions={("Work Order","read"):True,("Stock Entry","create"):True,("Stock Entry","read"):False},source=self.work_order())
+		with self.assertRaises(PermissionError):api.prepare_operation('transfer','WO-1',1)
+		factories['make_stock_entry'].assert_not_called();f.get_list.assert_not_called()
+
+	def test_receipt_and_delivery_drafts_use_exact_parent_and_child_link(self):
+		for operation,source_type,target,child,field in [('receipt','Purchase Order','Purchase Receipt','Purchase Receipt Item','purchase_order'),('delivery','Sales Order','Delivery Note','Delivery Note Item','against_sales_order')]:
+			api,f,p,_=self.api(permissions={(source_type,'read'):True,(target,'create'):True},source=Document(name='SRC',docstatus=1))
+			api.get_operation_drafts(operation,'SRC')
+			self.assertEqual(f.get_list.call_args.kwargs['filters'],[[target,'docstatus','=',0],[child,field,'=','SRC']])
+
+	def test_payments_only_follow_readable_invoices_deduplicate_and_do_not_total(self):
+		api,f,p,_=self.api(permissions={('Payment Entry','read'):True})
+		f.get_list.return_value=[{'name':'PAY-1','docstatus':1,'modified':'2026-11-04'}]
+		result=api._payments('SO-1',{'rows':[{'name':'INV-VISIBLE'}],'has_more':True})
+		self.assertEqual(len(result['rows']),1);self.assertTrue(result['has_more'])
+		filters=[c.kwargs['filters'] for c in f.get_list.call_args_list]
+		self.assertEqual(filters[1][1],['Payment Entry Reference','reference_name','=','INV-VISIBLE'])
+		self.assertNotIn('total',result)
+
+	def test_payment_denial_does_not_query_payment_rows(self):
+		api,f,p,_=self.api()
+		result=api._payments('SO-1',{'rows':[],'has_more':False})
+		self.assertFalse(result['allowed']);self.assertEqual(result['rows'],[]);f.get_list.assert_not_called()
+
+	def test_specification_mismatch_blocks_short_path(self):
+		api,f,p,_=self.api(permissions={('SVOENRAV Specification Snapshot','read'):True})
+		f.db.exists.return_value=True;f.get_list.return_value=[{'name':'SNAP'}]
+		f.get_doc.side_effect=None;f.get_doc.return_value=Document(name='SNAP',fingerprint='wrong')
+		spec=importlib.util.spec_from_file_location('svspec',ROOT/'erpnext/svoenrav/spec_rules.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+		source=Document(name='WO-1',company='C',production_item='BAG',bom_no='BOM1',stock_uom='шт',qty=1,required_items=[{'item_code':'L','stock_uom':'дм²','required_qty':10}])
+		with patch.dict(sys.modules,{'erpnext.svoenrav.spec_rules':module}), self.assertRaises(ValueError):api._check_specification(source)
+
+	def test_snapshot_existence_is_not_permission_to_read(self):
+		api,f,p,_=self.api();f.db.exists.return_value=True
+		with self.assertRaises(PermissionError):api._check_specification(self.work_order())
+		f.get_list.assert_not_called()
+
+	def test_unchanged_snapshot_allows_short_path_check(self):
+		api,f,p,_=self.api(permissions={('SVOENRAV Specification Snapshot','read'):True})
+		module_spec=importlib.util.spec_from_file_location('svspec',ROOT/'erpnext/svoenrav/spec_rules.py');module=importlib.util.module_from_spec(module_spec);module_spec.loader.exec_module(module)
+		source=Document(name='WO-1',company='C',production_item='BAG',bom_no='BOM1',stock_uom='шт',qty=1,required_items=[{'item_code':'L','stock_uom':'дм²','required_qty':10}])
+		f.db.exists.return_value=True;f.get_list.return_value=[{'name':'SNAP'}]
+		f.get_doc.side_effect=None;f.get_doc.return_value=Document(name='SNAP',fingerprint=module.specification(source.as_dict())[1])
+		with patch.dict(sys.modules,{'erpnext.svoenrav.spec_rules':module}):api._check_specification(source)

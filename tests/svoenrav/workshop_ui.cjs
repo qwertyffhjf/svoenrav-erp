@@ -205,10 +205,52 @@ function card(name, text="Сумка") {
 		ui.page.cutting_fields.used_area.set_value(13);
 		assert.equal(ui.page.cutting_review.children().length,0,"Editing a cutting quantity must clear the previous check");
 
+		ui.page.source_field.set_value("WO-1");ui.page.quantity_field.set_value(1);
+		ui.setHandler(async()=>({existing_drafts:{allowed:true,rows:[{name:"SE-DRAFT",url:"/desk/stock-entry/SE-DRAFT",modified:"2026-11-04"}],has_more:false}}));
+		await ui.page.prepare();
+		assert.match(ui.page.operation_review.text(),/SE-DRAFT/);
+		assert.equal(ui.page.operation_review_controls,null,"Existing draft must not leave a previously prepared new document openable");
+
+		const steps=card("SO-STEPS");steps.order.docstatus=1;steps.order.per_delivered=20;
+		steps.production={allowed:true,has_more:false,rows:[{name:"WO-STEPS",item_name:"Тест",docstatus:1,status:"In Process",qty:5,produced_qty:1,url:"/desk/work-order/WO-STEPS"}]};
+		ui.page.render_order(steps);
+		ui.page.card.find("button").filter((_,el)=>el.textContent === "Выдача").trigger("click");await turn();
+		assert.equal(ui.page.source_field.get_value(),"WO-STEPS","Order actions must prefill the exact source, not a similar item");
+		assert.equal(ui.page.operation_field.get_value(),"transfer");
+		ui.page.simple_button.trigger("click");
+		assert.equal(ui.page.root.hasClass("sv-simple"),true);
+		assert.equal(ui.page.card.find(".sv-finance").first().css("display"),"none");
+		assert.equal(ui.page.options.operations.length,4,"Simple mode is presentation, not a change in permissions");
+		ui.page.simple_button.trigger("click");
+
+		const plans=[];ui.setHandler(()=>new Promise(resolve=>plans.push(resolve)));
+		const planA=ui.page.load_plan(),planB=ui.page.load_plan();
+		plans[1]({complete:false,checked_at:"NEW",scope:"Неполно",orders:[{work_order:"WO-NEW",status:"unknown",rows:[]}]});await planB;
+		plans[0]({complete:true,checked_at:"OLD",scope:"Устарело",orders:[]});await planA;
+		assert.match(ui.page.plan_body.text(),/WO-NEW/);assert.doesNotMatch(ui.page.plan_body.text(),/Устарело/);
+
+		const histories=[];ui.setHandler(()=>new Promise(resolve=>histories.push(resolve)));
+		const hA=ui.page.load_history("SO-STEPS"),hB=ui.page.load_history("SO-STEPS");
+		histories[1]({allowed:false,rows:[{name:"SECRET"}],partial:true,notice:"Нет доступа"});await hB;
+		histories[0]({allowed:true,rows:[],partial:false,notice:"OLD HISTORY"});await hA;
+		assert.match(ui.page.history_body.text(),/Нет доступа/);assert.doesNotMatch(ui.page.history_body.text(),/SECRET|OLD HISTORY/);
+
+		let finishSpec;
+		ui.setHandler((method,args)=>method.endsWith("get_specification") ? new Promise(resolve=>{finishSpec=resolve;}) : Promise.resolve(report(args.work_order,"Материал",0)));
+		ui.page.material_field.set_value("WO-1");await turn();
+		const staleSpec=ui.page.load_specification();
+		ui.page.material_field.set_value("WO-2");
+		finishSpec({state:"matches",payload:"OLD SPEC"});await staleSpec;
+		assert.doesNotMatch(ui.page.spec_body.text(),/OLD SPEC/);
+		ui.setHandler(async(method)=>method.endsWith("capture_specification") ? {state:"matches",payload:"CAPTURED",notice:"Без списания"} : {state:"missing",can_capture:true});
+		await ui.page.load_specification();
+		ui.page.spec_body.find("button").trigger("click");await turn();
+		assert.match(ui.page.spec_body.text(),/CAPTURED/);
+
 		ui.page.options.operations=[];
 		ui.dom.window.frappe.route_options={operation:"delete"};
 		ui.page.apply_route();
-		assert.equal(ui.page.operation_field.get_value(),"manufacture","Unknown route option must not choose another operation");
+		assert.equal(ui.page.operation_field.get_value(),"transfer","Unknown route option must not choose another operation");
 		console.log("Workshop DOM checks: operation controls, duplicate click, failure recovery, stale card responses, text escaping, safe links, route validation, queue races, menu editor preservation and material report races/unknown values OK");
 	} finally {
 		ui.dom.window.close();

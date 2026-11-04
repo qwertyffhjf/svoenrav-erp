@@ -45,6 +45,7 @@
    {% if can_read_work_orders %}<a href="{{ workshop_url | e }}?view=queue">Очередь производства</a>{% endif %}
    {% if can_read_work_orders %}<a href="{{ workshop_url | e }}?view=materials">Материалы задания</a>{% endif %}
    {% if can_read_work_orders %}<a href="{{ workshop_url | e }}?view=cutting">Раскрой</a>{% endif %}
+   {% if can_read_work_orders %}<a href="{{ workshop_url | e }}?view=plan">План материалов</a>{% endif %}
    {% if can_read_orders %}<a href="{{ workshop_url | e }}?view=order">Карточка заказа</a>{% endif %}
    <a href="{{ workshop_url | e }}?view=policy">Учёт материалов</a>
    {% if quick_actions %}<a href="#sv-quick">Быстрые действия</a>{% endif %}

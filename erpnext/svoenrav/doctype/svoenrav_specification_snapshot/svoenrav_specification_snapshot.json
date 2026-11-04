@@ -1,0 +1,66 @@
+{
+ "doctype": "DocType",
+ "name": "SVOENRAV Specification Snapshot",
+ "module": "SVOENRAV",
+ "autoname": "format:SVSPEC-{#####}",
+ "engine": "InnoDB",
+ "track_changes": 1,
+ "is_submittable": 0,
+ "field_order": [
+  "work_order",
+  "company",
+  "fingerprint",
+  "payload"
+ ],
+ "fields": [
+  {
+   "fieldname": "work_order",
+   "fieldtype": "Link",
+   "options": "Work Order",
+   "label": "Производственное задание",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "options": "Company",
+   "label": "Компания",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fingerprint",
+   "fieldtype": "Data",
+   "label": "SHA-256 состава",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payload",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Зафиксированные нормы задания",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "create": 1
+  },
+  {
+   "role": "Manufacturing Manager",
+   "read": 1,
+   "create": 1
+  },
+  {
+   "role": "Manufacturing User",
+   "read": 1,
+   "create": 1
+  }
+ ],
+ "actions": [],
+ "links": [],
+ "states": []
+}

@@ -37,7 +37,9 @@ def demo_data():
 	wo = demo["work_order"]
 	wo["url"] = "/desk/work-order/" + wo["name"]
 	queue = pure_module("queue_rules")
-	demo["queue_row"] = queue.sort_queue([wo], {wo["name"]:{"priority":10}}, "2026-11-04")[0]
+	demo["second_work_order"]["url"] = "/desk/work-order/" + demo["second_work_order"]["name"]
+	demo["queue_rows"] = queue.sort_queue([wo,demo["second_work_order"]], {wo["name"]:{"priority":10}}, "2026-11-04")
+	demo["queue_row"] = demo["queue_rows"][0]
 	demo["coverage"] = {
 		**materials.coverage(materials.group_requirements(demo["material_rows"]), {(demo["material"],demo["warehouse"]):demo["balance"]}),
 		"work_order":wo["name"],"url":wo["url"],"checked_at":"ТЕСТОВЫЙ СНИМОК · 04.11.2026","review_required":False,
@@ -45,6 +47,17 @@ def demo_data():
 	}
 	empty = {"allowed":True,"rows":[],"has_more":False}
 	demo["order_card"] = {"order":demo["sales_order"],"url":"/desk/sales-order/"+demo["sales_order"]["name"],"items":[{"item_name":wo["item_name"],"qty":5,"uom":"шт","delivered_qty":1,"delivery_date":wo["expected_delivery_date"]}],"production":{"allowed":True,"rows":[wo],"has_more":False},"stock":empty,"deliveries":empty,"invoices":empty}
+	demo["order_card"]["invoices"] = {"doctype":"Sales Invoice","allowed":True,"rows":[demo["invoice"]],"has_more":False}
+	demo["order_card"]["payments"] = {"allowed":True,"rows":[demo["payment"]],"has_more":False,"note":"Вымышленные платежи. Полные суммы документов, не распределение оплаты по заказу."}
+	demo["order_card"]["timeline"] = {"rows":[{"at":demo["invoice"]["modified"],"doctype":"Sales Invoice",**demo["invoice"]}],"partial":False,"notice":"Вымышленный пример последних изменений документов."}
+	demo["coverage2"] = json.loads(json.dumps(demo["coverage"]))
+	demo["coverage2"]["work_order"] = demo["second_work_order"]["name"]
+	for row in demo["coverage2"]["rows"]:
+		row.update(required=20,transferred=0,consumed=0,pending=20,own_reserved=0)
+	demo["plan"] = {**pure_module("planning_rules").allocate([{"work_order":wo["name"],"company":demo["company"],"report":demo["coverage"]},{"work_order":demo["second_work_order"]["name"],"company":demo["company"],"report":demo["coverage2"]}]),"checked_at":"ТЕСТОВЫЙ ПЛАН · 04.11.2026","scope":"Тестовая очередь из двух заданий: свободные 20 дм² выделены первому. Второе получает дефицит. Никаких складских резервов не создаётся."}
+	payload, fingerprint = pure_module("spec_rules").specification({**wo,"required_items":demo["material_rows"]})
+	demo["specification"] = {"state":"matches","name":"DEMO-SPEC-001","url":"/desk/svoenrav-specification-snapshot/DEMO-SPEC-001","payload":payload,"fingerprint":fingerprint,"notice":"Вымышленный снимок норм. В превью фиксация хранится только в памяти страницы, без базы."}
+	demo["history"] = {"allowed":True,"partial":False,"rows":[{"at":"2026-11-02 10:00:00","name":wo["name"],"doctype":"Work Order","url":wo["url"],"field":"status","before":"Not Started","after":"In Process"}],"notice":"Вымышленные события для показа интерфейса; это не история вашей мастерской."}
 	cases = [demo["cutting"], {"area_unit":"м²","input_area":"0.3","used_area":"0.1","reusable_area":"0.1","waste_area":"0.1"}, {"area_unit":"см²","input_area":"1e3","used_area":600,"reusable_area":300,"waste_area":100}]
 	for value in (None,True,-1,"NaN","Infinity","1e-7","1.0000001"):
 		cases.append({**demo["cutting"],"used_area":value})
@@ -81,7 +94,7 @@ def render():
 	page_path = ROOT / "erpnext/svoenrav/page/svoenrav_workshop/svoenrav_workshop.js"
 	env = Environment(loader=DictLoader({"templates/web.html":"{% block style %}{% endblock %}{% block page_content %}{% endblock %}","home.html":template_path.read_text()}),undefined=StrictUndefined,autoescape=True)
 	home = env.get_template("home.html").render(**context)
-	inputs = [template_path,page_path,Path(__file__),PREVIEW/"fixtures.json",PREVIEW/"adapter.js",PREVIEW/"vendor/jquery-3.7.1.min.js",*(ROOT/f"erpnext/svoenrav/{name}.py" for name in ("menu","flow","queue_rules","material_rules","cutting_rules"))]
+	inputs = [template_path,page_path,Path(__file__),PREVIEW/"fixtures.json",PREVIEW/"adapter.js",PREVIEW/"vendor/jquery-3.7.1.min.js",*(ROOT/f"erpnext/svoenrav/{name}.py" for name in ("menu","flow","queue_rules","material_rules","cutting_rules","planning_rules","spec_rules"))]
 	digest = hashlib.sha256()
 	for path in inputs:
 		digest.update(path.relative_to(ROOT).as_posix().encode());digest.update(b"\0");digest.update(path.read_bytes())
@@ -95,7 +108,7 @@ def render():
 <title>SVOENRAV — автономное превью</title><style>{BASE_CSS}</style></head>
 <body><aside class="preview-banner"><strong>АВТОНОМНОЕ ПРЕВЬЮ · ВСЕ ДАННЫЕ ТЕСТОВЫЕ</strong>
 <p>Главная страница построена из настоящего HTML-шаблона, рабочие экраны используют JavaScript проекта. Внешняя оболочка и элементы Frappe заменены тестовым адаптером. Это не запущенная ERP: права, база, складские движения, сохранение и проведение здесь не работают. Изменения пропадут после закрытия страницы.</p>
-<div class="preview-toolbar"><button class="btn" id="preview-home-button">Главное меню</button><button class="btn" id="preview-workshop-button">Рабочие экраны</button><button class="btn btn-primary" id="preview-example-button">Пример раскроя</button></div><div id="preview-message" role="status"></div></aside>
+<div class="preview-toolbar"><button class="btn" id="preview-home-button">Главное меню</button><button class="btn" id="preview-workshop-button">Рабочие экраны</button><button class="btn btn-primary" id="preview-example-button">Пример раскроя</button><button class="btn" id="preview-order-button">Пример заказа</button></div><div id="preview-message" role="status"></div></aside>
 <section class="preview-stage" id="preview-home">{home}</section>
 <section class="preview-stage" id="preview-workshop" hidden><div id="preview-page-main"></div></section>
 <section class="preview-stage" id="preview-document" hidden><div id="preview-document-body"></div></section>

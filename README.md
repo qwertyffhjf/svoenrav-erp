@@ -8,6 +8,8 @@
 и откройте браузером. Это интерактивное превью с тестовыми данными, без базы,
 сохранения и проведения. [Что реализовано и ограничения](svoenrav/PREVIEW_AND_CUTTING.md).
 
+**Развитие процесса заказа:** [три части доработок и ограничения](svoenrav/ORDER_WORKFLOW.md).
+
 **Запуск:** `python tools/svoenrav.py start`
 
 **Инструкция:** [README_SVOENRAV.md](README_SVOENRAV.md).

@@ -5,6 +5,7 @@
 	const clone = (value) => JSON.parse(JSON.stringify(value));
 	const docs = new Map();
 	let sequence = 0;
+	let snapshotCaptured = false;
 	const message = (text) => { document.getElementById("preview-message").textContent = String(text); };
 	const show = (view) => {
 		for (const name of ["home", "workshop", "document"]) document.getElementById("preview-" + name).hidden = name !== view;
@@ -31,7 +32,7 @@
 				const id = "demo-options-" + (++sequence);
 				input.attr("list", id);
 				const list = $("<datalist></datalist>").attr("id", id).appendTo(wrapper);
-				const values = {"Work Order":[demo.work_order.name],"Sales Order":[demo.sales_order.name],"Purchase Order":[demo.purchase_order],"Item":[demo.material]};
+				const values = {"Work Order":[demo.work_order.name,demo.second_work_order.name],"Sales Order":[demo.sales_order.name],"Purchase Order":[demo.purchase_order],"Item":[demo.material]};
 				for (const value of values[df.options] || []) $("<option></option>").val(value).appendTo(list);
 			}
 		}
@@ -98,14 +99,25 @@
 	const xcall=async(method,args={})=>{
 		try {
 			if(method.endsWith("get_options"))return {operations:clone(demo.operations),can_read_orders:true,can_read_work_orders:true,can_cutting:true};
-			if(method.endsWith("prepare_operation"))return prepared(args);
+			if(method.endsWith("prepare_operation")) {
+				if(args.operation === "delivery" && args.source_name === demo.sales_order.name) return {existing_drafts:{allowed:true,rows:[{name:"DEMO-DN-DRAFT",url:"/desk/delivery-note/DEMO-DN-DRAFT",modified:"2026-11-04 11:00:00"}],has_more:false}};
+				return prepared(args);
+			}
+			if(method.endsWith("get_queue_plan"))return clone(demo.plan);
+			if(method.endsWith("get_order_history"))return clone(demo.history);
+			if(method.endsWith("get_specification") || method.endsWith("capture_specification")) {
+				if(args.work_order !== demo.work_order.name) throw Error("Снимок в превью подготовлен только для " + demo.work_order.name);
+				if(method.endsWith("capture_specification"))snapshotCaptured = true;
+				return snapshotCaptured ? clone(demo.specification) : {state:"missing",can_capture:true};
+			}
 			if(method.endsWith("get_order_card")){
 				if(args.sales_order!==demo.sales_order.name)throw Error("В превью доступен только " + demo.sales_order.name);
 				return clone(demo.order_card);
 			}
-			if(method.endsWith("get_production_queue"))return {rows:args.start?[]:[clone(demo.queue_row)],start:Number(args.start||0),has_more:false,total:1,can_configure:false};
+			if(method.endsWith("get_production_queue"))return {rows:args.start?[]:clone(demo.queue_rows),start:Number(args.start||0),has_more:false,total:2,can_configure:false};
 			if(method.endsWith("get_material_coverage")){
-				if(args.work_order!==demo.work_order.name)throw Error("В превью доступен только " + demo.work_order.name);
+				if(args.work_order === demo.second_work_order.name)return clone(demo.coverage2);
+				if(args.work_order!==demo.work_order.name)throw Error("Выберите тестовое задание.");
 				return clone(demo.coverage);
 			}
 			if(method.endsWith("evaluate_cutting")){
@@ -138,6 +150,7 @@
 		window.SVOENRAV_PREVIEW_PAGE=wrapper.svoenrav_workshop;
 		document.getElementById("preview-home-button").onclick=()=>show("home");
 		document.getElementById("preview-workshop-button").onclick=()=>show("workshop");
+		document.getElementById("preview-order-button").onclick=async()=>{show("workshop");const page=current();page.show("order");await page.order_field.set_value(demo.sales_order.name);};
 		document.getElementById("preview-example-button").onclick=async()=>{
 			show("workshop");const page=current();page.show("cutting");
 			for(const[key,value]of Object.entries(demo.cutting))await page.cutting_fields[key].set_value(value);

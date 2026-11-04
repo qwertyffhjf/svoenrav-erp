@@ -20,6 +20,9 @@ class SvoenravWorkshop {
 		this.request_id = 0;
 		this.queue_request_id = 0;
 		this.material_request_id = 0;
+		this.history_request_id = 0;
+		this.plan_request_id = 0;
+		this.spec_request_id = 0;
 		this.operation_revision = 0;
 		this.cutting_revision = 0;
 		this.ready = false;
@@ -28,6 +31,7 @@ class SvoenravWorkshop {
 		.sv-workshop{padding:20px;max-width:1200px;margin:auto}
 		.sv-workshop h2{font-size:21px;margin:8px 0 16px}.sv-workshop h3{font-size:17px;margin:24px 0 12px}
 		.sv-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}
+		.sv-workshop.sv-simple .sv-advanced,.sv-workshop.sv-simple .sv-finance{display:none!important}
 		.sv-tabs button{min-height:44px}.sv-panel{padding:20px;border:1px solid var(--border-color,#dce4df);border-radius:10px;margin-bottom:18px}
 		.sv-controls{display:grid;grid-template-columns:1fr 1fr;gap:18px}.sv-quantity{max-width:260px}
 		.sv-help{line-height:1.6;color:var(--text-muted,#647168);font-size:13px;white-space:pre-line}
@@ -39,6 +43,13 @@ class SvoenravWorkshop {
 		@media(max-width:600px){.sv-workshop{padding:12px}.sv-panel{padding:14px}.sv-controls{grid-template-columns:1fr;gap:0}.sv-summary>div{flex:1 1 42%}.sv-workshop td,.sv-workshop th{padding:8px}}
 		</style>`);
 		this.tabs = $("<nav class='sv-tabs' aria-label='Разделы мастерской'></nav>").appendTo(this.root);
+		this.simple_button = $("<button class='btn btn-default' type='button' aria-pressed='false'>Режим сотрудника</button>").appendTo(this.tabs).on("click", () => {
+			this.simple_mode = !this.simple_mode;
+			this.root.toggleClass("sv-simple", this.simple_mode);
+			if(this.simple_mode && this.current_view === "plan") this.show("queue");
+			this.simple_button.attr("aria-pressed", String(this.simple_mode)).text(this.simple_mode ? "Полный экран" : "Режим сотрудника");
+		});
+		this.plan_tab = $("<button class='btn btn-default sv-advanced' type='button'>План материалов</button>").appendTo(this.tabs).on("click", () => this.show("plan"));
 		this.operation_tab = $("<button class='btn btn-default' type='button'>Операции</button>").appendTo(this.tabs).on("click", () => this.show("operations"));
 		this.order_tab = $("<button class='btn btn-default' type='button'>Карточка заказа</button>").appendTo(this.tabs).on("click", () => this.show("order"));
 		this.queue_tab = $("<button class='btn btn-default' type='button'>Очередь производства</button>").appendTo(this.tabs).on("click", () => this.show("queue"));
@@ -51,6 +62,7 @@ class SvoenravWorkshop {
 		this.queue_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.material_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.cutting_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
+		this.plan_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.policy_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.build_policy();
 		this.show("operations");
@@ -66,6 +78,7 @@ class SvoenravWorkshop {
 			this.build_queue();
 			this.build_materials();
 			this.build_cutting();
+			this.build_plan();
 			this.ready = true;
 			this.feedback.empty();
 			this.apply_route();
@@ -75,13 +88,15 @@ class SvoenravWorkshop {
 	}
 
 	show(view) {
+		this.current_view = view;
+		this.plan_panel.toggle(view === "plan");
 		this.operations_panel.toggle(view === "operations");
 		this.order_panel.toggle(view === "order");
 		this.queue_panel.toggle(view === "queue");
 		this.material_panel.toggle(view === "materials");
 		this.cutting_panel.toggle(view === "cutting");
 		this.policy_panel.toggle(view === "policy");
-		for (const [key, button] of [["operations", this.operation_tab], ["order", this.order_tab], ["queue", this.queue_tab], ["materials", this.material_tab], ["cutting", this.cutting_tab], ["policy", this.policy_tab]]) {
+		for (const [key, button] of [["plan", this.plan_tab], ["operations", this.operation_tab], ["order", this.order_tab], ["queue", this.queue_tab], ["materials", this.material_tab], ["cutting", this.cutting_tab], ["policy", this.policy_tab]]) {
 			button.toggleClass("btn-primary", key === view).attr("aria-pressed", String(key === view));
 		}
 		if (view === "queue" && this.ready && this.options.can_read_work_orders) this.load_queue(this.queue_start || 0);
@@ -94,6 +109,7 @@ class SvoenravWorkshop {
 		if (!["operation", "sales_order", "work_order", "view"].some((key) => key in route)) return;
 		frappe.route_options = null;
 		if (typeof route.work_order === "string" && this.material_field) return this.open_materials(route.work_order);
+		if (route.view === "plan") return this.show("plan");
 		if (route.view === "materials") return this.show("materials");
 		if (route.view === "cutting") return this.show("cutting");
 		if (route.view === "policy") return this.show("policy");
@@ -177,10 +193,15 @@ class SvoenravWorkshop {
 		this.feedback.empty();
 		this.prepare_button.prop("disabled", true);
 		this.operation_review.empty();
+		this.operation_review_controls = null;
 		const revision = this.operation_revision;
 		try {
 			const doc = await frappe.xcall("erpnext.svoenrav.workshop.prepare_operation", args);
 			if (revision !== this.operation_revision) return;
+			if (doc.existing_drafts) {
+				this.render_drafts(doc.existing_drafts);
+				return;
+			}
 			this.operation_review_controls = this.render_review(this.operation_review, doc, spec, () => revision === this.operation_revision, source);
 		} catch (error) {
 			this.feedback.text("Документ не подготовлен. Проверьте сообщение ERPNext и исходные данные.");
@@ -188,6 +209,23 @@ class SvoenravWorkshop {
 			this.preparing = false;
 			this.prepare_button.prop("disabled", false);
 		}
+	}
+
+	async open_operation(key, source) {
+		if (!this.operation_field || !this.options.operations.some(row => row.key === key)) return;
+		const request = this.action_request_id = (this.action_request_id || 0) + 1;
+		await this.operation_field.set_value(key);
+		if(request !== this.action_request_id) return;
+		this.change_operation();
+		await this.source_field.set_value(source);
+		if(request === this.action_request_id) this.show("operations");
+	}
+
+	render_drafts(section) {
+		$("<h3>Уже есть черновики</h3>").appendTo(this.operation_review);
+		$("<p></p>").text("Откройте существующий документ и проверьте его. Новый документ короткая форма не подготовила. После обработки черновика повторите проверку.").appendTo(this.operation_review);
+		this.table(this.operation_review, ["Документ", "Изменён"], section.rows.map(row => [this.link(row), row.modified]));
+		if (section.has_more) $("<p></p>").text("Есть другие черновики. Проверьте полный список ERPNext.").appendTo(this.operation_review);
 	}
 
 	invalidate_review() {
@@ -311,6 +349,7 @@ class SvoenravWorkshop {
 	async load_order() {
 		if (!this.card) return;
 		const request_id = ++this.request_id;
+		this.history_request_id++;
 		const name = this.order_field.get_value();
 		this.card.empty();
 		if (!name) return;
@@ -364,15 +403,32 @@ class SvoenravWorkshop {
 			["Выставлено счетов", `${order.per_billed ?? 0}%`],
 		]) {
 			const box = $("<div></div>").appendTo(summary);
+			if (["Сумма заказа", "Аванс по заказу", "Выставлено счетов"].includes(label)) box.addClass("sv-finance");
 			$("<span></span>").text(label).appendTo(box);
 			$("<strong></strong>").text(value).appendTo(box);
 		}
+		this.render_order_steps(data);
+		$("<button type='button' class='btn btn-default sv-advanced'>История изменения состояний</button>").appendTo(this.card).on("click", () => this.load_history(order.name));
+		this.history_body = $("<div class='sv-advanced' aria-live='polite'></div>").appendTo(this.card);
 		$("<h3>Состав заказа</h3>").appendTo(this.card);
 		this.table(this.card, ["Изделие", "Количество", "Отгружено", "Срок"], data.items.map((row) => [row.item_name || row.item_code, `${row.qty} ${row.uom || ""}`, `${row.delivered_qty ?? 0} ${row.uom || ""}`, row.delivery_date]));
 		this.related("Производство", data.production, ["Документ", "Изделие", "Готово / план", "Статус", "Материалы"], (row) => [this.link(row), row.item_name, `${row.produced_qty ?? 0} / ${row.qty}`, this.status(row), this.material_button(row.name)]);
 		this.related("Материалы и выпуск", data.stock, ["Документ", "Операция", "Задание", "Состояние"], (row) => [this.link(row), __(row.purpose), row.work_order, this.status(row)]);
 		this.related("Отгрузки", data.deliveries, ["Документ", "Дата", "Статус"], (row) => [this.link(row), row.posting_date, this.status(row)]);
 		this.related("Счета покупателю", data.invoices, ["Документ", "Сумма", "Остаток к оплате", "Статус"], (row) => [this.link(row), `${row.grand_total} ${row.currency}`, `${row.outstanding_amount} ${row.currency}`, this.status(row)]);
+		if (data.payments) {
+			const finance = $("<div class='sv-finance'></div>").appendTo(this.card);
+			$("<h3>Платёжные документы</h3>").appendTo(finance);
+			if (data.payments.allowed) this.table(finance, ["Документ", "Дата", "Тип", "Списано / валюта", "Получено / валюта", "Состояние"], data.payments.rows.map(row => [this.link(row), row.posting_date, row.payment_type, `${row.paid_amount ?? "—"} ${row.paid_from_account_currency || ""}`, `${row.received_amount ?? "—"} ${row.paid_to_account_currency || ""}`, this.status(row)]));
+			else $("<p>Нет права чтения платежей.</p>").appendTo(finance);
+			$("<p class='sv-help'></p>").text(data.payments.note).appendTo(finance);
+			if (data.payments.has_more) $("<p>Список неполный: проверьте штатные документы.</p>").appendTo(finance);
+		}
+		if (data.timeline) {
+			$("<h3>Последние изменения документов</h3>").appendTo(this.card);
+			this.table(this.card, ["Изменён", "Тип", "Документ", "Состояние"], data.timeline.rows.map(row => [row.at, row.doctype, this.link(row), this.status(row)]));
+			$("<p class='sv-help'></p>").text(data.timeline.notice + (data.timeline.partial ? " Доступен неполный список." : "")).appendTo(this.card);
+		}
 		$("<p class='sv-help'></p>").text("Отображаются только доступные вам документы. Аванс относится к заказу; расчёты после выставления счетов смотрите по остаткам соответствующих счетов. Связанные документы показаны по последнему изменению, включая черновики и отмены.").appendTo(this.card);
 	}
 
@@ -383,10 +439,11 @@ class SvoenravWorkshop {
 	}
 
 	related(title, section, headings, build_row) {
-		$("<h3></h3>").text(title).appendTo(this.card);
-		if (!section.allowed) return $("<p class='sv-help'></p>").text("Раздел недоступен по правам чтения связанных документов.").appendTo(this.card);
-		this.table(this.card, headings, section.rows.map(build_row));
-		if (section.has_more) $("<p class='sv-help'></p>").text(section.note || "Показаны последние 20 документов. Остальные доступны в полном списке ERPNext.").appendTo(this.card);
+		const host = title === "Счета покупателю" ? $("<div class='sv-finance'></div>").appendTo(this.card) : this.card;
+		$("<h3></h3>").text(title).appendTo(host);
+		if (!section.allowed) return $("<p class='sv-help'></p>").text("Раздел недоступен по правам чтения связанных документов.").appendTo(host);
+		this.table(host, headings, section.rows.map(build_row));
+		if (section.has_more) $("<p class='sv-help'></p>").text(section.note || "Показаны последние 20 документов. Остальные доступны в полном списке ERPNext.").appendTo(host);
 	}
 
 	build_queue() {
@@ -432,7 +489,7 @@ class SvoenravWorkshop {
 	}
 
 	material_button(name) {
-		return $("<button type='button' class='btn btn-default btn-xs'>Проверить</button>")
+		return $("<button type='button' class='btn btn-default btn-xs'>Материалы</button>")
 			.on("click", () => this.open_materials(name))[0];
 	}
 
@@ -456,12 +513,16 @@ class SvoenravWorkshop {
 		});
 		$("<button type='button' class='btn btn-default sv-review'>Обновить проверку</button>").appendTo(this.material_panel).on("click", () => this.load_materials());
 		this.material_body = $("<div aria-live='polite'></div>").appendTo(this.material_panel);
+		$("<button type='button' class='btn btn-default sv-review'>Проверить зафиксированный состав</button>").appendTo(this.material_panel).on("click", () => this.load_specification());
+		this.spec_body = $("<div aria-live='polite'></div>").appendTo(this.material_panel);
 	}
 
 	async load_materials() {
 		if (!this.material_body) return;
 		const request = ++this.material_request_id;
 		const name = this.material_field.get_value();
+		this.spec_request_id++;
+		if(this.spec_body)this.spec_body.empty();
 		this.material_body.empty();
 		if (!name) return;
 		this.material_body.text("Проверяем материалы…");
@@ -485,6 +546,99 @@ class SvoenravWorkshop {
 		} catch (error) {
 			if (request === this.material_request_id) this.material_body.text("Проверка не выполнена. Проверьте сообщение ERPNext, доступ к материалам и складам. Отсутствие данных не считается нулевым остатком.");
 		}
+	}
+
+	render_order_steps(data) {
+		const host = $("<div></div>").appendTo(this.card);
+		$("<h3>Работа по заказу</h3>").appendTo(host);
+		const active = data.order.docstatus === 1 && !["Closed", "Completed", "Cancelled", "On Hold"].includes(data.order.status);
+		if (!active) return $("<p>Для действий нужен действующий проведённый заказ. Проверьте полную форму.</p>").appendTo(host);
+		if (!data.production.allowed) $("<p>Производство недоступно по правам; готовность не определена.</p>").appendTo(host);
+		else if (!data.production.rows.length) $("<p>Связанные задания не найдены. Создайте Work Order из штатной формы заказа, проверив состав и BOM.</p>").appendTo(host);
+		else {
+			for (const row of data.production.rows) {
+				const line = $("<div class='sv-tabs'></div>").appendTo(host);
+				$("<strong></strong>").text(row.name + " · " + (row.item_name || "")).appendTo(line);
+				line.append(this.material_button(row.name));
+				if (row.docstatus !== 1 || ["Stopped", "Closed", "Completed", "Cancelled"].includes(row.status)) continue;
+				const amounts = [row.qty,row.produced_qty,row.material_transferred_for_manufacturing];
+				let next = "Проверьте материалы, нормы и полную форму задания.";
+				if(amounts.every(value => value != null && Number.isFinite(Number(value)))) {
+					if(Number(row.produced_qty) >= Number(row.qty)) next = "План выпуска выполнен. Проверьте готовые изделия и отгрузку.";
+					else if(row.skip_transfer) next = "Задание без передачи материалов: проверьте наличие и фактический расход в полной форме.";
+					else if(Number(row.material_transferred_for_manufacturing) > Number(row.produced_qty)) next = "Есть выданные материалы. Проверьте раскрой и фактический расход перед выпуском.";
+					else next = "Проверьте обеспечение материалами и выдачу в производство.";
+				}
+				$("<p class='sv-help'></p>").text(next).appendTo(host);
+				for (const key of ["transfer", "manufacture"]) {
+					const spec = this.options.operations.find(op => op.key === key);
+					if(spec) $("<button type='button' class='btn btn-default'></button>").text(spec.label).appendTo(line).on("click", () => this.open_operation(key, row.name));
+				}
+				if(this.options.can_cutting) $("<button type='button' class='btn btn-default'>Раскрой</button>").appendTo(line).on("click", async () => {
+					await this.cutting_fields.work_order.set_value(row.name); this.show("cutting");
+				});
+			}
+		}
+		if (data.production.has_more) $("<p>Показаны не все задания. Общая готовность заказа не рассчитана.</p>").appendTo(host);
+		const delivery = this.options.operations.find(op => op.key === "delivery");
+		if(delivery && Number(data.order.per_delivered) < 100) $("<button type='button' class='btn btn-default'>Проверить отгрузку заказа</button>").appendTo(host).on("click", () => this.open_operation("delivery", data.order.name));
+		$("<p class='sv-help'></p>").text("Следующий шаг: проверьте материалы задания, существующие черновики и фактическую готовность. Кнопки — переходы к проверке; они не подтверждают наличие и не проводят документы.").appendTo(host);
+	}
+
+	async load_history(name) {
+		const request = ++this.history_request_id;
+		const host = this.history_body;
+		host.text("Загружаем записанные изменения…");
+		try {
+			const data = await frappe.xcall("erpnext.svoenrav.history.get_order_history", {sales_order:name});
+			if(request !== this.history_request_id) return;
+			host.empty();
+			if(data.allowed) this.table(host,["Дата", "Документ", "Поле", "Было", "Стало"],data.rows.map(row=>[row.at,this.link(row),row.field,row.before,row.after]));
+			$("<p class='sv-help'></p>").text(data.notice + (data.partial ? " История неполная." : "")).appendTo(host);
+		} catch(error) { if(request === this.history_request_id) host.text("История не загружена. Проверьте сообщение ERPNext."); }
+	}
+
+	build_plan() {
+		this.plan_panel.append("<h2>План материалов по очереди</h2><p class='sv-help'>Сначала собственные резервы задания, затем свободный остаток по приоритету. Паузы не получают свободный остаток. Только доступные задания, максимум 50. Расчёт не создаёт резервов.</p>");
+		$("<button type='button' class='btn btn-default'>Рассчитать план</button>").appendTo(this.plan_panel).on("click", () => this.load_plan());
+		this.plan_body = $("<div aria-live='polite'></div>").appendTo(this.plan_panel);
+	}
+
+	async load_plan() {
+		const request = ++this.plan_request_id;
+		this.plan_body.text("Рассчитываем доступную очередь…");
+		try {
+			const data = await frappe.xcall("erpnext.svoenrav.planning.get_queue_plan");
+			if(request !== this.plan_request_id) return;
+			this.plan_body.empty();
+			$("<p></p>").text((data.complete ? "План рассчитан. " : "Неполные данные: распределение не выполнено. ") + data.checked_at).appendTo(this.plan_body);
+			$("<p class='sv-help'></p>").text(data.scope).appendTo(this.plan_body);
+			const labels={paused:"Пауза",unknown:"Не определено",shortage:"Дефицит",covered:"Потребность покрыта в плане"};
+			for(const order of data.orders){
+				$("<h3></h3>").text(order.work_order + " · " + labels[order.status]).appendTo(this.plan_body);
+				this.table(this.plan_body,["Материал", "Склад", "Единица", "Осталось выдать", "Свой резерв", "Выделено в плане", "Дефицит"],order.rows.map(row=>[row.item_name||row.item_code,row.warehouse,row.stock_uom,row.pending,row.own_reserved,row.planned_free,row.shortage]));
+			}
+		} catch(error) { if(request === this.plan_request_id) this.plan_body.text("План не рассчитан. Проверьте права, полноту очереди и сообщение ERPNext."); }
+	}
+
+	async load_specification(capture = false) {
+		const name = this.material_field?.get_value();
+		if(!name || this.spec_busy) return;
+		const request = ++this.spec_request_id;
+		this.spec_busy = true;
+		this.spec_body.text(capture ? "Сохраняем неизменяемый снимок норм…" : "Проверяем состав…");
+		try {
+			const data = await frappe.xcall("erpnext.svoenrav.specifications." + (capture ? "capture_specification" : "get_specification"), {work_order:name});
+			if(request !== this.spec_request_id) return;
+			this.spec_body.empty();
+			const labels={matches:"Нормы совпадают со снимком",changed:"Внимание: нормы задания отличаются от снимка",missing:"Состав ещё не зафиксирован",unavailable:"Снимок существует, но недоступен по правам"};
+			$("<h3></h3>").text(labels[data.state] || "Нет данных состава").appendTo(this.spec_body);
+			if(data.url) this.spec_body.append(this.link(data));
+			if(data.payload) $("<pre></pre>").text(data.payload).appendTo(this.spec_body);
+			$("<p class='sv-help'></p>").text(data.notice || "Фиксация сохраняет текущие нормы задания. Ранее действовавшую версию BOM она не восстанавливает.").appendTo(this.spec_body);
+			if(data.state === "missing" && data.can_capture) $("<button type='button' class='btn btn-primary'>Зафиксировать текущие нормы</button>").appendTo(this.spec_body).on("click", () => this.load_specification(true));
+		} catch(error) { if(request === this.spec_request_id) this.spec_body.text("Состав не проверен. Проверьте права и сообщение ERPNext."); }
+		finally { this.spec_busy = false; }
 	}
 
 	build_policy() {

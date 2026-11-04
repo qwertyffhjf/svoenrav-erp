@@ -29,6 +29,7 @@ def _source(doctype, name):
 		frappe.throw(str(exc), frappe.ValidationError)
 	doc = frappe.get_doc(doctype, name)
 	doc.check_permission("read")
+	doc.apply_fieldlevel_read_permissions()
 	return doc
 
 
@@ -47,6 +48,25 @@ def get_options():
 	}
 
 
+def _drafts(spec, name):
+	if spec["source"] == "Work Order":
+		filters = {"work_order": name, "purpose": spec["purpose"], "docstatus": 0}
+	else:
+		child, field = ("Purchase Receipt Item", "purchase_order") if spec["source"] == "Purchase Order" else ("Delivery Note Item", "against_sales_order")
+		filters = [[spec["target"], "docstatus", "=", 0], [child, field, "=", name]]
+	return _related(spec["target"], filters, [])
+
+
+@frappe.whitelist()
+def get_operation_drafts(operation, source_name):
+	require_staff()
+	spec = _operation(operation)
+	if not _available(spec):
+		frappe.throw("Нет права на операцию.", frappe.PermissionError)
+	source = _source(spec["source"], source_name)
+	return _drafts(spec, source.name)
+
+
 @frappe.whitelist(methods=["POST"])
 def prepare_operation(operation, source_name, quantity=None):
 	"""Return an unsaved native document for review in the standard form."""
@@ -57,6 +77,11 @@ def prepare_operation(operation, source_name, quantity=None):
 	source = _source(spec["source"], source_name)
 	if source.docstatus != 1 or source.get("status") in ("Stopped", "Closed", "Completed", "Cancelled", "On Hold"):
 		frappe.throw("Выберите действующий проведённый документ.", frappe.ValidationError)
+	drafts = _drafts(spec, source.name)
+	if not drafts["allowed"]:
+		frappe.throw("Для короткой операции требуется право чтения существующих черновиков целевого документа.", frappe.PermissionError)
+	if drafts["rows"] or drafts["has_more"]:
+		return {"existing_drafts": drafts}
 	if spec["source"] == "Work Order":
 		# A previously used consumption scheme may remain after settings change.
 		# Only test existence for this permission-checked source; do not expose
@@ -75,6 +100,7 @@ def prepare_operation(operation, source_name, quantity=None):
 			)
 		except ValueError as exc:
 			frappe.throw(str(exc), frappe.ValidationError)
+		_check_specification(source)
 		from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
 
 		target = frappe.get_doc(make_stock_entry(source.name, spec["purpose"], qty=float(qty)))
@@ -122,7 +148,7 @@ def get_order_card(sales_order):
 	order = _source("Sales Order", sales_order)
 	# Parent queries with child filters retain document permissions. Do not query
 	# child tables directly or join by item_code, customer or free text.
-	production = _related("Work Order", {"sales_order": order.name}, ["item_name", "qty", "produced_qty", "status", "expected_delivery_date"])
+	production = _related("Work Order", {"sales_order": order.name}, ["item_name", "qty", "produced_qty", "material_transferred_for_manufacturing", "skip_transfer", "status", "expected_delivery_date"])
 	# Stock Entry has a Link to Work Order, but DatabaseQuery does not follow Link
 	# joins automatically. Use a permission-aware subquery of accessible work orders.
 	stock = {"doctype": "Stock Entry", "allowed": False, "rows": [], "has_more": False}
@@ -134,12 +160,54 @@ def get_order_card(sales_order):
 			stock = _related("Stock Entry", {"work_order": ["in", work_orders]}, ["purpose", "work_order", "posting_date"])
 		else:
 			stock = {"doctype": "Stock Entry", "allowed": True, "rows": [], "has_more": False}
+	invoices = _related("Sales Invoice", [["Sales Invoice Item", "sales_order", "=", order.name]], ["posting_date", "status", "currency", "grand_total", "outstanding_amount"])
+	deliveries = _related("Delivery Note", [["Delivery Note Item", "against_sales_order", "=", order.name]], ["posting_date", "status"])
 	return {
 		"order": {field: order.get(field) for field in ("name", "customer_name", "status", "docstatus", "transaction_date", "delivery_date", "currency", "grand_total", "advance_paid", "per_delivered", "per_billed")},
 		"url": get_url_to_form("Sales Order", order.name),
 		"items": [{field: row.get(field) for field in ("item_code", "item_name", "qty", "uom", "delivered_qty", "delivery_date")} for row in order.get("items", [])],
 		"production": production,
 		"stock": stock,
-		"deliveries": _related("Delivery Note", [["Delivery Note Item", "against_sales_order", "=", order.name]], ["posting_date", "status"]),
-		"invoices": _related("Sales Invoice", [["Sales Invoice Item", "sales_order", "=", order.name]], ["posting_date", "status", "currency", "grand_total", "outstanding_amount"]),
+		"deliveries": deliveries,
+		"invoices": invoices,
+		"payments": _payments(order.name, invoices),
+		"timeline": _timeline(order, [production, stock, deliveries, invoices]),
 	}
+
+
+def _payments(order_name, invoices):
+	# Payment references may point to SO directly or to a readable linked invoice.
+	sections = [_related("Payment Entry", [["Payment Entry Reference", "reference_doctype", "=", "Sales Order"], ["Payment Entry Reference", "reference_name", "=", order_name]], ["posting_date", "payment_type", "paid_amount", "paid_from_account_currency", "received_amount", "paid_to_account_currency"])]
+	for row in invoices["rows"]:
+		sections.append(_related("Payment Entry", [["Payment Entry Reference", "reference_doctype", "=", "Sales Invoice"], ["Payment Entry Reference", "reference_name", "=", row["name"]]], ["posting_date", "payment_type", "paid_amount", "paid_from_account_currency", "received_amount", "paid_to_account_currency"]))
+	rows = {r["name"]: r for section in sections for r in section["rows"]}
+	return {"allowed": sections[0]["allowed"], "rows": sorted(rows.values(), key=lambda r: (str(r.get("modified") or ""), r["name"]), reverse=True)[:LIMIT], "has_more": invoices["has_more"] or len(rows) > LIMIT or any(s["has_more"] for s in sections), "note": "Показаны полные суммы платёжных документов, не доля оплаты этого заказа. Суммы разных валют не суммируются. Платежи по недоступным счетам и журнальные проводки могут отсутствовать."}
+
+
+def _timeline(order, sections):
+	# A document index, not a fabricated audit trail of every status transition.
+	events = [{"at": order.get("modified"), "doctype": "Sales Order", "name": order.name, "docstatus": order.get("docstatus"), "url": get_url_to_form("Sales Order", order.name)}]
+	for section in sections:
+		for row in section["rows"]:
+			events.append({"at": row.get("modified"), "doctype": section["doctype"], "name": row["name"], "docstatus": row.get("docstatus"), "url": row["url"]})
+	return {"rows": sorted(events, key=lambda r: (str(r["at"] or ""), r["doctype"], r["name"]), reverse=True), "partial": any(not s["allowed"] or s["has_more"] for s in sections), "notice": "Последние изменения доступных связанных документов. Это не полный журнал смены статусов. Полная история каждого документа находится в его штатной форме."}
+
+
+def _check_specification(order):
+	"""A captured baseline cannot silently drift in the guided production path."""
+	doctype = "SVOENRAV Specification Snapshot"
+	if not frappe.db.exists(doctype, {"work_order": order.name}):
+		return  # Legacy orders can be captured explicitly; never invent an old BOM.
+	if not frappe.has_permission(doctype, ptype="read"):
+		frappe.throw("Нет права проверить зафиксированный состав. Используйте полную форму задания.", frappe.PermissionError)
+	rows = frappe.get_list(doctype, filters={"work_order": order.name}, fields=["name"], limit_page_length=1)
+	if not rows:
+		frappe.throw("Снимок состава недоступен. Короткая операция остановлена.", frappe.PermissionError)
+	snapshot = _source(doctype, rows[0]["name"])
+	from erpnext.svoenrav.spec_rules import specification
+	try:
+		_, digest = specification(order.as_dict())
+	except ValueError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+	if not snapshot.get("fingerprint") or snapshot.get("fingerprint") != digest:
+		frappe.throw("Нормы задания отличаются от зафиксированного состава. Проверьте версию и оформите новое задание для изменения норм.", frappe.ValidationError)
