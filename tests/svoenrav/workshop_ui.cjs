@@ -158,11 +158,31 @@ function card(name, text="Сумка") {
 		assert.equal(automatic_fields.action_doctype,"Stock Entry");
 		assert.equal(automatic_fields.open_mode,"Новый документ");
 
+		const material_pending = {};
+		ui.setHandler((method,args)=>new Promise((resolve)=>{material_pending[args.work_order]=resolve;}));
+		ui.page.open_materials("WO-A");
+		ui.page.open_materials("WO-B");
+		const report = (name,label,shortage) => ({work_order:name,url:"/desk/work-order/"+name,checked_at:"2026-11-04 12:00",status:"shortage",notice:"Не создаёт резерв",rows:[{item_name:label,stock_uom:"дм²",warehouse:"MAIN",required:10,transferred:0,pending:10,actual:0,reserved_total:0,own_reserved:0,free:0,shortage,status:"shortage"}]});
+		material_pending["WO-B"](report("WO-B","<img src=x onerror=alert(1)>",null));
+		await turn();
+		material_pending["WO-A"](report("WO-A","Устаревшие материалы",10));
+		await turn();
+		assert.doesNotMatch(ui.page.material_body.text(),/Устаревшие материалы/);
+		assert.equal(ui.page.material_body.find("img").length,0);
+		assert.match(ui.page.material_body.text(),/Не создаёт резерв/);
+		const cells=ui.page.material_body.find("tbody tr:first td");
+		assert.equal(cells.eq(4).text(),"0","A real zero must be visible as zero");
+		assert.equal(cells.eq(8).text(),"—","Unknown shortage must not become zero");
+		ui.setHandler(async()=>{throw new Error("Forbidden");});
+		await ui.page.load_materials();
+		assert.match(ui.page.material_body.text(),/Проверка не выполнена/);
+		assert.equal(ui.page.material_body.find("table").length,0,"An error must not leave an old successful report visible");
+
 		ui.page.options.operations=[];
 		ui.dom.window.frappe.route_options={operation:"delete"};
 		ui.page.apply_route();
 		assert.equal(ui.page.operation_field.get_value(),"manufacture","Unknown route option must not choose another operation");
-		console.log("Workshop DOM checks: operation controls, duplicate click, failure recovery, stale card responses, text escaping, safe links, route validation, queue races and menu editor preservation OK");
+		console.log("Workshop DOM checks: operation controls, duplicate click, failure recovery, stale card responses, text escaping, safe links, route validation, queue races, menu editor preservation and material report races/unknown values OK");
 	} finally {
 		ui.dom.window.close();
 	}

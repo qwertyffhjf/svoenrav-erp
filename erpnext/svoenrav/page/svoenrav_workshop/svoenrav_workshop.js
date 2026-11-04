@@ -19,6 +19,7 @@ class SvoenravWorkshop {
 		this.page = page;
 		this.request_id = 0;
 		this.queue_request_id = 0;
+		this.material_request_id = 0;
 		this.ready = false;
 		this.root = $("<div class='sv-workshop'></div>").appendTo(page.main);
 		this.root.append(`<style>
@@ -39,11 +40,13 @@ class SvoenravWorkshop {
 		this.operation_tab = $("<button class='btn btn-default' type='button'>Операции</button>").appendTo(this.tabs).on("click", () => this.show("operations"));
 		this.order_tab = $("<button class='btn btn-default' type='button'>Карточка заказа</button>").appendTo(this.tabs).on("click", () => this.show("order"));
 		this.queue_tab = $("<button class='btn btn-default' type='button'>Очередь производства</button>").appendTo(this.tabs).on("click", () => this.show("queue"));
+		this.material_tab = $("<button class='btn btn-default' type='button'>Материалы задания</button>").appendTo(this.tabs).on("click", () => this.show("materials"));
 		this.policy_tab = $("<button class='btn btn-default' type='button'>Как учитываются материалы</button>").appendTo(this.tabs).on("click", () => this.show("policy"));
 		this.feedback = $("<div class='sv-feedback text-muted' role='status'></div>").appendTo(this.root);
 		this.operations_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.order_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.queue_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
+		this.material_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.policy_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.build_policy();
 		this.show("operations");
@@ -57,6 +60,7 @@ class SvoenravWorkshop {
 			this.build_operations();
 			this.build_order();
 			this.build_queue();
+			this.build_materials();
 			this.ready = true;
 			this.feedback.empty();
 			this.apply_route();
@@ -69,8 +73,9 @@ class SvoenravWorkshop {
 		this.operations_panel.toggle(view === "operations");
 		this.order_panel.toggle(view === "order");
 		this.queue_panel.toggle(view === "queue");
+		this.material_panel.toggle(view === "materials");
 		this.policy_panel.toggle(view === "policy");
-		for (const [key, button] of [["operations", this.operation_tab], ["order", this.order_tab], ["queue", this.queue_tab], ["policy", this.policy_tab]]) {
+		for (const [key, button] of [["operations", this.operation_tab], ["order", this.order_tab], ["queue", this.queue_tab], ["materials", this.material_tab], ["policy", this.policy_tab]]) {
 			button.toggleClass("btn-primary", key === view).attr("aria-pressed", String(key === view));
 		}
 		if (view === "queue" && this.ready && this.options.can_read_work_orders) this.load_queue(this.queue_start || 0);
@@ -80,8 +85,10 @@ class SvoenravWorkshop {
 		if (!this.ready) return;
 		const route = frappe.route_options || {};
 		// Consume only our known options; never accept document fields or URLs.
-		if (!["operation", "sales_order", "view"].some((key) => key in route)) return;
+		if (!["operation", "sales_order", "work_order", "view"].some((key) => key in route)) return;
 		frappe.route_options = null;
+		if (typeof route.work_order === "string" && this.material_field) return this.open_materials(route.work_order);
+		if (route.view === "materials") return this.show("materials");
 		if (route.view === "policy") return this.show("policy");
 		if (route.view === "queue") return this.show("queue");
 		if (typeof route.sales_order === "string" && this.order_field) {
@@ -248,7 +255,7 @@ class SvoenravWorkshop {
 		}
 		$("<h3>Состав заказа</h3>").appendTo(this.card);
 		this.table(this.card, ["Изделие", "Количество", "Отгружено", "Срок"], data.items.map((row) => [row.item_name || row.item_code, `${row.qty} ${row.uom || ""}`, `${row.delivered_qty ?? 0} ${row.uom || ""}`, row.delivery_date]));
-		this.related("Производство", data.production, ["Документ", "Изделие", "Готово / план", "Статус"], (row) => [this.link(row), row.item_name, `${row.produced_qty ?? 0} / ${row.qty}`, this.status(row)]);
+		this.related("Производство", data.production, ["Документ", "Изделие", "Готово / план", "Статус", "Материалы"], (row) => [this.link(row), row.item_name, `${row.produced_qty ?? 0} / ${row.qty}`, this.status(row), this.material_button(row.name)]);
 		this.related("Материалы и выпуск", data.stock, ["Документ", "Операция", "Задание", "Состояние"], (row) => [this.link(row), __(row.purpose), row.work_order, this.status(row)]);
 		this.related("Отгрузки", data.deliveries, ["Документ", "Дата", "Статус"], (row) => [this.link(row), row.posting_date, this.status(row)]);
 		this.related("Счета покупателю", data.invoices, ["Документ", "Сумма", "Остаток к оплате", "Статус"], (row) => [this.link(row), `${row.grand_total} ${row.currency}`, `${row.outstanding_amount} ${row.currency}`, this.status(row)]);
@@ -294,18 +301,75 @@ class SvoenravWorkshop {
 			this.queue_body.empty();
 			if (data.can_configure) this.queue_settings.append(this.link({name: "Настроить приоритеты и паузы", url: data.settings_url}));
 			$("<p class='sv-help'></p>").text(`Доступно заданий: ${data.total}. Показано: ${data.rows.length}.`).appendTo(this.queue_body);
-			this.table(this.queue_body, ["Приоритет", "Задание", "Изделие", "Готово / план", "Срок", "Состояние", "Причина / примечание"], data.rows.map((row) => [
+			this.table(this.queue_body, ["Приоритет", "Задание", "Изделие", "Готово / план", "Срок", "Состояние", "Причина / примечание", "Материалы"], data.rows.map((row) => [
 				row.priority ?? "Без ручного",
 				this.link(row), row.item_name,
 				`${row.produced_qty ?? 0} / ${row.qty} ${row.stock_uom || ""}`,
 				(row.expected_delivery_date || "Не задан") + (row.overdue ? " · Просрочено" : ""),
 				row.native_stopped ? "Задание остановлено" : row.planning_paused ? "Пауза планирования" : __(row.status),
 				row.reason || "—",
+				this.material_button(row.name),
 			]));
 			if (data.start > 0) $("<button type='button' class='btn btn-default'>Назад</button>").appendTo(this.queue_paging).on("click", () => this.load_queue(Math.max(data.start - 50, 0)));
 			if (data.has_more) $("<button type='button' class='btn btn-default'>Следующие 50</button>").appendTo(this.queue_paging).on("click", () => this.load_queue(data.start + 50));
 		} catch (error) {
 			if (request === this.queue_request_id) this.queue_body.text("Не удалось загрузить очередь. Проверьте сообщение ERPNext, права и настройки приоритетов.");
+		}
+	}
+
+	material_button(name) {
+		return $("<button type='button' class='btn btn-default btn-xs'>Проверить</button>")
+			.on("click", () => this.open_materials(name))[0];
+	}
+
+	open_materials(name) {
+		this.show("materials");
+		if (!this.material_field) return;
+		if (this.material_field.get_value() === name) this.load_materials();
+		else this.material_field.set_value(name);
+	}
+
+	build_materials() {
+		this.material_panel.append("<h2>Материалы производственного задания</h2>");
+		if (!this.options.can_read_work_orders) {
+			this.material_panel.append($("<p></p>").text("Нет права чтения производственных заданий."));
+			return;
+		}
+		this.material_field = frappe.ui.form.make_control({
+			parent: this.material_panel,
+			df: {fieldtype: "Link", label: "Производственное задание", options: "Work Order", fieldname: "material_work_order", get_query: () => ({filters: {docstatus: 1, status: ["not in", ["Completed", "Closed", "Cancelled"]]}}), onchange: () => this.load_materials()},
+			render_input: true,
+		});
+		$("<button type='button' class='btn btn-default sv-review'>Обновить проверку</button>").appendTo(this.material_panel).on("click", () => this.load_materials());
+		this.material_body = $("<div aria-live='polite'></div>").appendTo(this.material_panel);
+	}
+
+	async load_materials() {
+		if (!this.material_body) return;
+		const request = ++this.material_request_id;
+		const name = this.material_field.get_value();
+		this.material_body.empty();
+		if (!name) return;
+		this.material_body.text("Проверяем материалы…");
+		try {
+			const data = await frappe.xcall("erpnext.svoenrav.materials.get_material_coverage", {work_order: name});
+			if (request !== this.material_request_id) return;
+			this.material_body.empty();
+			const labels = {reserved: "Потребность к выдаче покрыта резервами задания", unreserved: "Есть свободный, но не закреплённый остаток", shortage: "Есть дефицит для выдачи", issued: "План выдачи материалов выполнен", unknown: "Недостаточно данных", review: "Требуется проверка"};
+			$("<h3></h3>").text(labels[data.status] || labels.unknown).appendTo(this.material_body);
+			this.material_body.append(this.link({name: "Открыть задание " + data.work_order, url: data.url}));
+			$("<p class='sv-help'></p>").text("Проверено: " + data.checked_at + ". " + data.notice).appendTo(this.material_body);
+			if (data.review_required) $("<p class='sv-help'></p>").text("В задании есть особые условия производства. Числа ниже справочные; проверьте полную форму задания.").appendTo(this.material_body);
+			const amount = (row, key) => row[key] == null ? "—" : String(row[key]);
+			this.table(this.material_body, ["Материал / ед.", "Склад", "План / выдано", "Осталось выдать", "На складе", "Все резервы", "Резерв задания", "Свободно", "Нехватка", "Проверка"], data.rows.map((row) => [
+				`${row.item_name} · ${row.stock_uom}`, row.warehouse,
+				`${amount(row, "required")} / ${amount(row, "transferred")}`,
+				amount(row, "pending"), amount(row, "actual"), amount(row, "reserved_total"),
+				amount(row, "own_reserved"), amount(row, "free"), amount(row, "shortage"),
+				row.note || labels[row.status] || labels.unknown,
+			]));
+		} catch (error) {
+			if (request === this.material_request_id) this.material_body.text("Проверка не выполнена. Проверьте сообщение ERPNext, доступ к материалам и складам. Отсутствие данных не считается нулевым остатком.");
 		}
 	}
 
