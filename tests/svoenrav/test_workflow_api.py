@@ -36,7 +36,7 @@ class WorkflowAPITests(unittest.TestCase):
 		f=ModuleType('frappe');f.PermissionError=PermissionError;f.ValidationError=ValueError
 		f.whitelist=lambda *a,**k:lambda fn:fn
 		f.throw=Mock(side_effect=lambda message,error=ValueError:(_ for _ in ()).throw(error(message)))
-		f.has_permission=Mock(return_value=True);f.get_list=Mock(return_value=[]);f.db=Mock();f.db.exists.return_value=False
+		f.has_permission=Mock(return_value=True);f.get_list=Mock(return_value=[]);f.db=Mock();f.db.exists.return_value=False;f.db.get_value.return_value=None
 		utils=ModuleType('frappe.utils');utils.get_url_to_form=lambda dt,name:'/desk/'+dt+'/'+name;utils.now=lambda:'NOW'
 		portal=ModuleType('erpnext.svoenrav.portal');portal.require_staff=Mock()
 		materials=ModuleType('erpnext.svoenrav.materials');materials.readable=Mock(return_value=source());materials.get_material_coverage=Mock(return_value={'status':'review','rows':[]})
@@ -78,7 +78,8 @@ class WorkflowAPITests(unittest.TestCase):
 	def test_snapshot_controller_derives_payload_and_blocks_later_changes(self):
 		f,p,m,q,w=self.setup();api=load('specifications')
 		document=ModuleType('frappe.model.document');document.Document=Doc
-		with patch.dict(sys.modules,{'erpnext.svoenrav.specifications':api,'frappe.model.document':document}):
+		pack=ModuleType('erpnext.svoenrav.spec_pack');pack.build_pack=Mock(return_value=('{}','PACKHASH'))
+		with patch.dict(sys.modules,{'erpnext.svoenrav.specifications':api,'frappe.model.document':document,'erpnext.svoenrav.spec_pack':pack}):
 			controller=load('snapshot_controller','erpnext/svoenrav/doctype/svoenrav_specification_snapshot/svoenrav_specification_snapshot.py')
 			doc=controller.SVOENRAVSpecificationSnapshot(work_order='WO-1',company='EVIL',payload='FAKE',fingerprint='FAKE')
 			doc.validate();self.assertEqual(doc.company,'C');self.assertEqual(json.loads(doc.payload)['bom_no'],'BOM1');self.assertEqual(len(doc.fingerprint),64)
@@ -88,7 +89,7 @@ class WorkflowAPITests(unittest.TestCase):
 			with self.assertRaises(ValueError):doc.before_rename()
 
 	def test_snapshot_read_applies_field_permissions(self):
-		f,p,m,q,w=self.setup();api=load('specifications');f.get_list.return_value=[{'name':'SNAP'}]
+		f,p,m,q,w=self.setup();api=load('specifications');f.db.get_value.return_value='SNAP'
 		m.readable.side_effect=[source(),Doc(name='SNAP',fingerprint=None,payload=None)]
 		with self.assertRaises(PermissionError):api.get_specification('WO-1')
 
@@ -109,7 +110,7 @@ class WorkflowAPITests(unittest.TestCase):
 			self.assertEqual(api.visible_changes(invalid,{'status'}),[])
 
 	def test_history_uses_exact_version_links_and_marks_truncation(self):
-		f,p,m,q,w=self.setup();api=load('history')
+		f,p,m,q,w=self.setup();f.has_permission.side_effect=lambda dt,ptype='read':dt=='Version';api=load('history')
 		section={'allowed':True,'rows':[],'has_more':False}
 		w.get_order_card.return_value={'order':{'name':'SO-1'},**{k:section for k in ('production','stock','deliveries','invoices','payments')}}
 		w._source.return_value=Doc(name='SO-1',status='Open')

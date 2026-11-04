@@ -64,3 +64,23 @@ def validate_production(operation, order, quantity, *, separate_consumption=Fals
 	if qty > maximum:
 		raise ValueError(f"Доступно количество не более {max(maximum, Decimal(0))}. Проверьте передачу материалов и предыдущий выпуск.")
 	return qty
+
+
+def visible_dict(doc):
+	"""Serialize only surviving, unmasked fields after Frappe read filtering.
+
+	Frappe as_dict() reintroduces missing numeric attributes as zero. Those are
+	not readable zeroes and must never enter stock planning or historical output.
+	"""
+	values = doc.as_dict()
+	raw = doc if isinstance(doc, dict) else vars(doc)
+	flags = raw.get('flags') or getattr(doc, 'flags', None)
+	masked = flags.get('masked_fieldnames', ()) if hasattr(flags, 'get') else ()
+	if not isinstance(masked, (list, set, tuple)):
+		masked = ()
+	result = {key:(None if raw.get(key) is None else value) for key,value in values.items() if key in raw and key not in masked}
+	for key, value in list(result.items()):
+		original = raw.get(key)
+		if isinstance(original, list):
+			result[key] = [visible_dict(row) if hasattr(row, 'as_dict') else row for row in original]
+	return result

@@ -5,7 +5,7 @@
 	const clone = (value) => JSON.parse(JSON.stringify(value));
 	const docs = new Map();
 	let sequence = 0;
-	let snapshotCaptured = false;
+	let snapshotCaptured = true;
 	const message = (text) => { document.getElementById("preview-message").textContent = String(text); };
 	const show = (view) => {
 		for (const name of ["home", "workshop", "document"]) document.getElementById("preview-" + name).hidden = name !== view;
@@ -98,12 +98,20 @@
 	};
 	const xcall=async(method,args={})=>{
 		try {
-			if(method.endsWith("get_options"))return {operations:clone(demo.operations),can_read_orders:true,can_read_work_orders:true,can_cutting:true};
+			if(method.endsWith("get_options"))return {operations:clone(demo.operations),can_read_orders:true,can_read_work_orders:true,can_cutting:true,can_reserve:true,can_allocate_payments:true};
 			if(method.endsWith("prepare_operation")) {
 				if(args.operation === "delivery" && args.source_name === demo.sales_order.name) return {existing_drafts:{allowed:true,rows:[{name:"DEMO-DN-DRAFT",url:"/desk/delivery-note/DEMO-DN-DRAFT",modified:"2026-11-04 11:00:00"}],has_more:false}};
 				return prepared(args);
 			}
 			if(method.endsWith("get_queue_plan"))return clone(demo.plan);
+			if(method.endsWith("reserve_queue")) {
+				const created=[];
+				for(const order of demo.plan.orders) for(const row of order.rows) if(row.planned_free > 0) {
+					created.push({name:"DEMO-RESERVE-"+(++sequence),url:"/desk/stock-reservation-entry/DEMO-RESERVE"});
+					row.own_reserved += row.planned_free; row.planned_free=0;
+				}
+				return {created,count:created.length,notice:"Только имитация в памяти страницы. Реальные резервы не создаются."};
+			}
 			if(method.endsWith("get_order_history"))return clone(demo.history);
 			if(method.endsWith("get_specification") || method.endsWith("capture_specification")) {
 				if(args.work_order !== demo.work_order.name) throw Error("Снимок в превью подготовлен только для " + demo.work_order.name);
@@ -129,7 +137,7 @@
 		} catch(error) {message(error.message);throw error;}
 	};
 	window.__=(value)=>value;
-	window.frappe={pages:{"svoenrav-workshop":{}},route_options:null,ui:{make_app_page:()=>({main:$("#preview-page-main")}),form:{make_control:control}},xcall,msgprint:message,
+	window.frappe={pages:{"svoenrav-workshop":{}},route_options:null,ui:{make_app_page:()=>({main:$("#preview-page-main")}),form:{make_control:control}},xcall,msgprint:message,confirm:(text,callback)=>{if(window.confirm(text))callback();},
 		model:{sync:(doc)=>{docs.set(doc.name,clone(doc));return [doc];}},
 		set_route:async(view,doctype,name)=>{
 			if(view!=="Form")throw Error("В превью доступен только просмотр документа.");

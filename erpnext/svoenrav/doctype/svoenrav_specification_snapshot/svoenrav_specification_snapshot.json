@@ -10,7 +10,9 @@
   "work_order",
   "company",
   "fingerprint",
-  "payload"
+  "payload",
+  "pack_hash",
+  "pack"
  ],
  "fields": [
   {
@@ -40,6 +42,19 @@
    "fieldtype": "Code",
    "options": "JSON",
    "label": "Зафиксированные нормы задания",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pack_hash",
+   "fieldtype": "Data",
+   "label": "SHA-256 пакета норм",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pack",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "BOM, маршрут и метаданные вложений",
    "read_only": 1
   }
  ],

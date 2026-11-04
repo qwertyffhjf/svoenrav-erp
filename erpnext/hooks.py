@@ -89,7 +89,9 @@ welcome_email = "erpnext.setup.utils.welcome_email"
 setup_wizard_requires = "assets/erpnext/js/setup_wizard.js"
 setup_wizard_stages = "erpnext.setup.setup_wizard.setup_wizard.get_setup_stages"
 
-after_install = "erpnext.setup.install.after_install"
+after_install = ["erpnext.setup.install.after_install", "erpnext.svoenrav.roles.install_profiles"]
+before_install = "erpnext.svoenrav.roles.ensure_roles"
+before_migrate = "erpnext.svoenrav.roles.ensure_roles"
 
 after_app_install = "erpnext.setup.install.after_app_install"
 after_app_uninstall = "erpnext.setup.install.after_app_uninstall"
@@ -382,6 +384,8 @@ sqlite_search = ["erpnext.stock.doctype.item.item_search.ItemSearch"]
 
 doc_events = {
 	"*": {
+		"on_change": "erpnext.svoenrav.events.record_event",
+		"on_trash": "erpnext.svoenrav.events.record_deletion",
 		"validate": [
 			"erpnext.support.doctype.service_level_agreement.service_level_agreement.apply",
 			"erpnext.setup.doctype.transaction_deletion_record.transaction_deletion_record.check_for_running_deletion_job",
@@ -390,11 +394,20 @@ doc_events = {
 	tuple(period_closing_doctypes): {
 		"validate": "erpnext.accounts.doctype.accounting_period.accounting_period.validate_accounting_period_on_doc_save",
 	},
+	"Work Order": {"on_submit": "erpnext.svoenrav.specifications.capture_on_submit", "before_update_after_submit": "erpnext.svoenrav.specifications.guard_frozen_norms"},
+	"Purchase Receipt": {"before_validate": "erpnext.svoenrav.transactions.guard_duplicate_draft"},
+	"Delivery Note": {"before_validate": "erpnext.svoenrav.transactions.guard_duplicate_draft"},
+	"Stock Reservation Entry": {
+		"before_validate": "erpnext.svoenrav.transactions.lock_reservation",
+		"before_submit": "erpnext.svoenrav.transactions.lock_reservation",
+		"before_cancel": "erpnext.svoenrav.transactions.lock_reservation",
+	},
 	"Item": {
 		"on_update": "erpnext.stock.doctype.item.item_search.reindex_item",
 		"after_rename": "erpnext.stock.doctype.item.item_search.reindex_renamed_item",
 	},
 	"Stock Entry": {
+		"before_validate": "erpnext.svoenrav.transactions.guard_duplicate_draft",
 		"on_submit": "erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty",
 		"on_cancel": "erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty",
 	},
@@ -755,3 +768,17 @@ data_import_providers = {
 	"Customer": "erpnext.utilities.party_import_provider.PartyImportProvider",
 	"Supplier": "erpnext.utilities.party_import_provider.PartyImportProvider",
 }
+
+# SVOENRAV role definitions are installed without assigning users or changing
+# existing native roles. Source and field checks protect stored audit payloads.
+after_migrate = ["erpnext.svoenrav.roles.install_profiles"]
+permission_query_conditions.update({
+    "SVOENRAV Payment Allocation": "erpnext.svoenrav.access.event_query",
+    "SVOENRAV Operation Event": "erpnext.svoenrav.access.event_query",
+    "SVOENRAV Specification Snapshot": "erpnext.svoenrav.access.snapshot_query",
+})
+has_permission.update({
+    "SVOENRAV Payment Allocation": "erpnext.svoenrav.access.allocation_permission",
+    "SVOENRAV Operation Event": "erpnext.svoenrav.access.event_permission",
+    "SVOENRAV Specification Snapshot": "erpnext.svoenrav.access.snapshot_permission",
+})

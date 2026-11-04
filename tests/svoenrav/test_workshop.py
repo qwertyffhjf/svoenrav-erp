@@ -39,9 +39,11 @@ def setup_api(*, permissions=None, source=None, target=None):
 	frappe.whitelist = lambda *args, **kwargs: lambda fn: fn
 	frappe.has_permission = Mock(side_effect=lambda doctype, ptype="read": permissions.get((doctype, ptype), permissions.get((doctype, "create"), False) if ptype == "read" and doctype in ("Stock Entry", "Purchase Receipt", "Delivery Note") else False))
 	frappe.get_list = Mock(return_value=[])
+	frappe.get_roles = Mock(return_value=[])
 	frappe.db = Mock()
 	frappe.db.get_single_value.return_value = False
 	frappe.db.exists.return_value = False
+	frappe.db.get_value.return_value = None
 	frappe.get_doc = Mock(side_effect=lambda *args: target if isinstance(args[0], dict) else source)
 	utils = ModuleType("frappe.utils")
 	utils.get_url_to_form = lambda doctype, name: "/desk/" + doctype.lower().replace(" ", "-") + "/" + name
@@ -61,6 +63,14 @@ def setup_api(*, permissions=None, source=None, target=None):
 		factories[function] = Mock(return_value=target)
 		setattr(stub, function, factories[function])
 		modules[module] = stub
+	material_stub = ModuleType("erpnext.svoenrav.materials")
+	material_stub.readable = lambda dt,name: frappe.get_doc(dt,name)
+	modules["erpnext.svoenrav.materials"] = material_stub
+	for module_name in ("payment_rules", "payments"):
+		with patch.dict(sys.modules, modules):
+			module_spec = importlib.util.spec_from_file_location("erpnext.svoenrav."+module_name, ROOT/f"erpnext/svoenrav/{module_name}.py")
+			loaded = importlib.util.module_from_spec(module_spec);module_spec.loader.exec_module(loaded)
+			modules["erpnext.svoenrav."+module_name] = loaded
 	factory_patch = patch.dict(sys.modules, modules)
 	factory_patch.start()
 	spec = importlib.util.spec_from_file_location("workshop_under_test", ROOT / "erpnext/svoenrav/workshop.py")
@@ -241,7 +251,7 @@ class WorkshopTests(unittest.TestCase):
 
 	def test_specification_mismatch_blocks_short_path(self):
 		api,f,p,_=self.api(permissions={('SVOENRAV Specification Snapshot','read'):True})
-		f.db.exists.return_value=True;f.get_list.return_value=[{'name':'SNAP'}]
+		f.db.exists.return_value=True;f.db.get_value.return_value='SNAP'
 		f.get_doc.side_effect=None;f.get_doc.return_value=Document(name='SNAP',fingerprint='wrong')
 		spec=importlib.util.spec_from_file_location('svspec',ROOT/'erpnext/svoenrav/spec_rules.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 		source=Document(name='WO-1',company='C',production_item='BAG',bom_no='BOM1',stock_uom='шт',qty=1,required_items=[{'item_code':'L','stock_uom':'дм²','required_qty':10}])
@@ -256,6 +266,6 @@ class WorkshopTests(unittest.TestCase):
 		api,f,p,_=self.api(permissions={('SVOENRAV Specification Snapshot','read'):True})
 		module_spec=importlib.util.spec_from_file_location('svspec',ROOT/'erpnext/svoenrav/spec_rules.py');module=importlib.util.module_from_spec(module_spec);module_spec.loader.exec_module(module)
 		source=Document(name='WO-1',company='C',production_item='BAG',bom_no='BOM1',stock_uom='шт',qty=1,required_items=[{'item_code':'L','stock_uom':'дм²','required_qty':10}])
-		f.db.exists.return_value=True;f.get_list.return_value=[{'name':'SNAP'}]
+		f.db.exists.return_value=True;f.db.get_value.return_value='SNAP'
 		f.get_doc.side_effect=None;f.get_doc.return_value=Document(name='SNAP',fingerprint=module.specification(source.as_dict())[1])
 		with patch.dict(sys.modules,{'erpnext.svoenrav.spec_rules':module}):api._check_specification(source)

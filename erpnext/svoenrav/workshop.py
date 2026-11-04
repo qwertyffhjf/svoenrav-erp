@@ -9,7 +9,7 @@ Native factories may prepare serial/batch bundles as in the standard UI.
 import frappe
 from frappe.utils import get_url_to_form
 
-from erpnext.svoenrav.flow import OPERATIONS, validate_production, validate_source
+from erpnext.svoenrav.flow import OPERATIONS, validate_production, validate_source, visible_dict
 from erpnext.svoenrav.portal import require_staff
 
 PAGE_URL = "/desk/svoenrav-workshop"
@@ -42,6 +42,9 @@ def get_options():
 	require_staff()
 	return {
 		"operations": [{"key": key, **spec} for key, spec in OPERATIONS.items() if _available(spec)],
+		"simple_default": "SVOENRAV Operator" in frappe.get_roles() and not set(frappe.get_roles()).intersection({"SVOENRAV Owner", "SVOENRAV Planner", "SVOENRAV Finance", "System Manager"}),
+		"can_reserve": all(frappe.has_permission("Stock Reservation Entry", ptype=p) for p in ("read", "create", "submit")) and bool(frappe.has_permission("Work Order", ptype="write")),
+		"can_allocate_payments": bool(frappe.has_permission("SVOENRAV Payment Allocation", ptype="create")),
 		"can_read_orders": bool(frappe.has_permission("Sales Order", ptype="read")),
 		"can_read_work_orders": bool(frappe.has_permission("Work Order", ptype="read")),
 		"can_cutting": bool(frappe.has_permission("Work Order", ptype="read") and frappe.has_permission("Item", ptype="read") and frappe.has_permission("SVOENRAV Cutting Draft", ptype="create")),
@@ -94,7 +97,7 @@ def prepare_operation(operation, source_name, quantity=None):
 		try:
 			qty = validate_production(
 				operation,
-				source.as_dict(),
+				visible_dict(source),
 				quantity,
 				separate_consumption=bool(prior_consumption or frappe.db.get_single_value("Manufacturing Settings", "material_consumption")),
 			)
@@ -170,7 +173,7 @@ def get_order_card(sales_order):
 		"stock": stock,
 		"deliveries": deliveries,
 		"invoices": invoices,
-		"payments": _payments(order.name, invoices),
+		"payments": _payments_with_allocations(order.name, invoices),
 		"timeline": _timeline(order, [production, stock, deliveries, invoices]),
 	}
 
@@ -200,14 +203,20 @@ def _check_specification(order):
 		return  # Legacy orders can be captured explicitly; never invent an old BOM.
 	if not frappe.has_permission(doctype, ptype="read"):
 		frappe.throw("Нет права проверить зафиксированный состав. Используйте полную форму задания.", frappe.PermissionError)
-	rows = frappe.get_list(doctype, filters={"work_order": order.name}, fields=["name"], limit_page_length=1)
+	name = frappe.db.get_value(doctype, {"work_order": order.name}, "name")
+	rows = [{"name": name}] if name else []
 	if not rows:
 		frappe.throw("Снимок состава недоступен. Короткая операция остановлена.", frappe.PermissionError)
 	snapshot = _source(doctype, rows[0]["name"])
 	from erpnext.svoenrav.spec_rules import specification
 	try:
-		_, digest = specification(order.as_dict())
+		_, digest = specification(visible_dict(order))
 	except ValueError as exc:
 		frappe.throw(str(exc), frappe.ValidationError)
 	if not snapshot.get("fingerprint") or snapshot.get("fingerprint") != digest:
 		frappe.throw("Нормы задания отличаются от зафиксированного состава. Проверьте версию и оформите новое задание для изменения норм.", frappe.ValidationError)
+
+
+def _payments_with_allocations(order_name, invoices):
+	from erpnext.svoenrav.payments import enrich_payments
+	return enrich_payments(_payments(order_name, invoices), order_name)

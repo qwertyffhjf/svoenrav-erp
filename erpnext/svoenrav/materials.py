@@ -3,7 +3,7 @@
 import frappe
 from frappe.utils import get_url_to_form, now
 
-from erpnext.svoenrav.flow import validate_source
+from erpnext.svoenrav.flow import validate_source, visible_dict
 from erpnext.svoenrav.material_rules import EPSILON, ZERO, coverage, group_requirements, quantity
 from erpnext.svoenrav.portal import require_staff
 
@@ -61,7 +61,7 @@ def get_material_coverage(work_order):
 	if order.get("skip_transfer") not in (0, 1) or not order.get("company"):
 		frappe.throw("Недостаточно доступных данных задания для проверки материалов.", frappe.PermissionError)
 	try:
-		groups = group_requirements([row.as_dict() for row in (order.get("required_items") or [])], order.get("source_warehouse"), skip_transfer=bool(order.get("skip_transfer")))
+		groups = group_requirements([visible_dict(row) for row in (order.get("required_items") or [])], order.get("source_warehouse"), skip_transfer=bool(order.get("skip_transfer")))
 	except ValueError as exc:
 		frappe.throw(str(exc), frappe.ValidationError)
 	balances = {}

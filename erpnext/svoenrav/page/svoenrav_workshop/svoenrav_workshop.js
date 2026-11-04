@@ -32,7 +32,8 @@ class SvoenravWorkshop {
 		.sv-workshop h2{font-size:21px;margin:8px 0 16px}.sv-workshop h3{font-size:17px;margin:24px 0 12px}
 		.sv-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}
 		.sv-workshop.sv-simple .sv-advanced,.sv-workshop.sv-simple .sv-finance{display:none!important}
-		.sv-tabs button{min-height:44px}.sv-panel{padding:20px;border:1px solid var(--border-color,#dce4df);border-radius:10px;margin-bottom:18px}
+		.sv-mobile-nav{display:none;width:100%;min-height:44px;padding:10px;border:1px solid var(--border-color,#dce4df);border-radius:8px;margin-bottom:12px;font:inherit}
+		.sv-workshop button{min-height:44px}.sv-tabs button{min-height:44px}.sv-panel{padding:20px;border:1px solid var(--border-color,#dce4df);border-radius:10px;margin-bottom:18px}
 		.sv-controls{display:grid;grid-template-columns:1fr 1fr;gap:18px}.sv-quantity{max-width:260px}
 		.sv-help{line-height:1.6;color:var(--text-muted,#647168);font-size:13px;white-space:pre-line}
 		.sv-review{min-height:44px;margin-top:12px}.sv-summary{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px}
@@ -40,12 +41,15 @@ class SvoenravWorkshop {
 		.sv-summary strong{display:block;margin-top:4px}.sv-table-wrap{overflow:auto}
 		.sv-workshop table{width:100%;font-size:13px}.sv-workshop td,.sv-workshop th{padding:10px;border-bottom:1px solid var(--border-color,#dce4df);vertical-align:top}
 		.sv-workshop a{overflow-wrap:anywhere}.sv-feedback:empty{display:none}.sv-feedback{margin:12px 0}
-		@media(max-width:600px){.sv-workshop{padding:12px}.sv-panel{padding:14px}.sv-controls{grid-template-columns:1fr;gap:0}.sv-summary>div{flex:1 1 42%}.sv-workshop td,.sv-workshop th{padding:8px}}
+		@media(max-width:600px){.sv-mobile-nav{display:block}.sv-workshop>.sv-tabs>button:not(.sv-mode){display:none}.sv-workshop{padding:12px}.sv-panel{padding:14px}.sv-controls{grid-template-columns:1fr;gap:0}.sv-summary>div{flex:1 1 42%}.sv-workshop td,.sv-workshop th{padding:8px}}
 		</style>`);
+		this.mobile_nav = $("<select class='sv-mobile-nav' aria-label='Раздел мастерской'></select>").appendTo(this.root).on("change", () => this.show(this.mobile_nav.val()));
+		for(const [value,label] of [["operations","Операции"],["order","Карточка заказа"],["queue","Очередь производства"],["materials","Материалы задания"],["cutting","Раскрой"],["plan","План материалов"],["policy","Учёт материалов"]]) $("<option></option>").val(value).text(label).appendTo(this.mobile_nav);
 		this.tabs = $("<nav class='sv-tabs' aria-label='Разделы мастерской'></nav>").appendTo(this.root);
-		this.simple_button = $("<button class='btn btn-default' type='button' aria-pressed='false'>Режим сотрудника</button>").appendTo(this.tabs).on("click", () => {
+		this.simple_button = $("<button class='btn btn-default sv-mode' type='button' aria-pressed='false'>Режим сотрудника</button>").appendTo(this.tabs).on("click", () => {
 			this.simple_mode = !this.simple_mode;
 			this.root.toggleClass("sv-simple", this.simple_mode);
+			this.mobile_nav.find("option[value=plan]").prop("hidden",!!this.simple_mode);
 			if(this.simple_mode && this.current_view === "plan") this.show("queue");
 			this.simple_button.attr("aria-pressed", String(this.simple_mode)).text(this.simple_mode ? "Полный экран" : "Режим сотрудника");
 		});
@@ -79,6 +83,7 @@ class SvoenravWorkshop {
 			this.build_materials();
 			this.build_cutting();
 			this.build_plan();
+			if(this.options.simple_default && !this.simple_mode) this.simple_button.trigger("click");
 			this.ready = true;
 			this.feedback.empty();
 			this.apply_route();
@@ -89,6 +94,7 @@ class SvoenravWorkshop {
 
 	show(view) {
 		this.current_view = view;
+		this.mobile_nav.val(view);
 		this.plan_panel.toggle(view === "plan");
 		this.operations_panel.toggle(view === "operations");
 		this.order_panel.toggle(view === "order");
@@ -421,6 +427,13 @@ class SvoenravWorkshop {
 			$("<h3>Платёжные документы</h3>").appendTo(finance);
 			if (data.payments.allowed) this.table(finance, ["Документ", "Дата", "Тип", "Списано / валюта", "Получено / валюта", "Состояние"], data.payments.rows.map(row => [this.link(row), row.posting_date, row.payment_type, `${row.paid_amount ?? "—"} ${row.paid_from_account_currency || ""}`, `${row.received_amount ?? "—"} ${row.paid_to_account_currency || ""}`, this.status(row)]));
 			else $("<p>Нет права чтения платежей.</p>").appendTo(finance);
+			if(data.payments.allowed) {
+				this.table(finance, ["Платёж", "Доля заказа", "Валюта", "Распределение"], data.payments.rows.map(row => [row.name,row.order_amount,row.order_currency,{exact:"Точная доля",needs_split:"Требуется распределение",not_submitted:"Не проведён",unavailable:"Нет данных"}[row.allocation_state] || "Нет данных"]));
+				for(const row of data.payments.rows) for(const allocation of row.allocation_links || []) finance.append(this.link({name:"Изменить долю заказа в " + row.name,url:allocation.url}));
+				if(this.options.can_allocate_payments) for(const row of data.payments.rows) for(const reference of row.allocation_references || []) finance.append(this.link({name:"Распределить " + row.name + " · " + reference.reference,url:reference.url}));
+				if(data.payments.order_totals) for(const [currency,total] of Object.entries(data.payments.order_totals)) $("<p></p>").text("Распределено на заказ: " + total + " " + currency).appendTo(finance);
+				else if(data.payments.allocations_complete === false) $("<p></p>").text("Общий итог не определён: есть нераспределённые или недоступные суммы.").appendTo(finance);
+			}
 			$("<p class='sv-help'></p>").text(data.payments.note).appendTo(finance);
 			if (data.payments.has_more) $("<p>Список неполный: проверьте штатные документы.</p>").appendTo(finance);
 		}
@@ -593,7 +606,7 @@ class SvoenravWorkshop {
 			const data = await frappe.xcall("erpnext.svoenrav.history.get_order_history", {sales_order:name});
 			if(request !== this.history_request_id) return;
 			host.empty();
-			if(data.allowed) this.table(host,["Дата", "Документ", "Поле", "Было", "Стало"],data.rows.map(row=>[row.at,this.link(row),row.field,row.before,row.after]));
+			if(data.allowed) this.table(host,["Дата", "Документ", "Поле", "Было", "Стало"],data.rows.map(row=>[row.at,this.link(row),({status:"Статус",docstatus:"Состояние документа",qty:"План выпуска",produced_qty:"Выпущено",material_transferred_for_manufacturing:"Материалы выданы на количество",per_delivered:"Отгружено, %",per_billed:"Выставлено счетов, %",norms_hash:"Версия состава материалов",references_hash:"Версия распределения платежа",reserved_qty:"Зарезервировано",transferred_qty:"Передано",consumed_qty:"Израсходовано",amount:"Доля платежа",paid_amount:"Списано",received_amount:"Получено",bom_no:"Спецификация",production_item:"Изделие"})[row.field] || row.field,row.field.endsWith("_hash") && row.before ? String(row.before).slice(0,8) : row.before,row.field.endsWith("_hash") && row.after ? String(row.after).slice(0,8) : row.after]));
 			$("<p class='sv-help'></p>").text(data.notice + (data.partial ? " История неполная." : "")).appendTo(host);
 		} catch(error) { if(request === this.history_request_id) host.text("История не загружена. Проверьте сообщение ERPNext."); }
 	}
@@ -601,16 +614,19 @@ class SvoenravWorkshop {
 	build_plan() {
 		this.plan_panel.append("<h2>План материалов по очереди</h2><p class='sv-help'>Сначала собственные резервы задания, затем свободный остаток по приоритету. Паузы не получают свободный остаток. Только доступные задания, максимум 50. Расчёт не создаёт резервов.</p>");
 		$("<button type='button' class='btn btn-default'>Рассчитать план</button>").appendTo(this.plan_panel).on("click", () => this.load_plan());
+		if(this.options.can_reserve) this.reserve_button = $("<button type='button' class='btn btn-primary sv-review' disabled>Создать складские резервы по очереди</button>").appendTo(this.plan_panel).on("click", () => this.reserve_plan());
 		this.plan_body = $("<div aria-live='polite'></div>").appendTo(this.plan_panel);
 	}
 
 	async load_plan() {
 		const request = ++this.plan_request_id;
 		this.plan_body.text("Рассчитываем доступную очередь…");
+		if(this.reserve_button)this.reserve_button.prop("disabled",true);
 		try {
 			const data = await frappe.xcall("erpnext.svoenrav.planning.get_queue_plan");
 			if(request !== this.plan_request_id) return;
 			this.plan_body.empty();
+			if(this.reserve_button)this.reserve_button.prop("disabled",!data.complete);
 			$("<p></p>").text((data.complete ? "План рассчитан. " : "Неполные данные: распределение не выполнено. ") + data.checked_at).appendTo(this.plan_body);
 			$("<p class='sv-help'></p>").text(data.scope).appendTo(this.plan_body);
 			const labels={paused:"Пауза",unknown:"Не определено",shortage:"Дефицит",covered:"Потребность покрыта в плане"};
@@ -619,6 +635,22 @@ class SvoenravWorkshop {
 				this.table(this.plan_body,["Материал", "Склад", "Единица", "Осталось выдать", "Свой резерв", "Выделено в плане", "Дефицит"],order.rows.map(row=>[row.item_name||row.item_code,row.warehouse,row.stock_uom,row.pending,row.own_reserved,row.planned_free,row.shortage]));
 			}
 		} catch(error) { if(request === this.plan_request_id) this.plan_body.text("План не рассчитан. Проверьте права, полноту очереди и сообщение ERPNext."); }
+	}
+
+	reserve_plan() {
+		if(this.reserve_busy || !this.reserve_button || this.reserve_button.prop("disabled")) return;
+		frappe.confirm("Создать и провести штатные резервы материалов по актуальной очереди? Это изменит складские резервы. Перед выполнением сервер пересчитает план.", async () => {
+			if(this.reserve_busy) return;
+			this.reserve_busy = true; this.reserve_button.prop("disabled",true);
+			this.plan_request_id++;
+			try {
+				const result = await frappe.xcall("erpnext.svoenrav.reservations.reserve_queue");
+				await this.load_plan();
+				$("<p></p>").text("Создано резервов: " + result.count + ". " + result.notice).appendTo(this.plan_body);
+				for(const row of result.created) this.plan_body.append(this.link(row));
+			} catch(error) { this.plan_body.text("Резервирование не выполнено. Проверьте сообщение ERPNext и обновите план. При потере связи сначала проверьте фактические резервы."); }
+			finally { this.reserve_busy = false; }
+		});
 	}
 
 	async load_specification(capture = false) {
@@ -634,7 +666,20 @@ class SvoenravWorkshop {
 			const labels={matches:"Нормы совпадают со снимком",changed:"Внимание: нормы задания отличаются от снимка",missing:"Состав ещё не зафиксирован",unavailable:"Снимок существует, но недоступен по правам"};
 			$("<h3></h3>").text(labels[data.state] || "Нет данных состава").appendTo(this.spec_body);
 			if(data.url) this.spec_body.append(this.link(data));
-			if(data.payload) $("<pre></pre>").text(data.payload).appendTo(this.spec_body);
+			if(data.payload) {
+				try {
+					const spec = JSON.parse(data.payload);
+					$("<p></p>").text("Изделие: " + spec.production_item + " · Количество: " + spec.qty + " " + spec.stock_uom + " · Спецификация: " + spec.bom_no).appendTo(this.spec_body);
+					this.table(this.spec_body,["Материал", "Норма на задание", "Единица", "Операция"],(spec.items || []).map(row=>[row.item_code,row.required_qty,row.stock_uom,row.operation]));
+				} catch(error) { $("<pre></pre>").text(data.payload).appendTo(this.spec_body); }
+			}
+			if(data.pack) {
+				try {
+					const pack = JSON.parse(data.pack);
+					$("<p></p>").text("Зафиксировано спецификаций: " + Object.keys(pack.boms || {}).length + ". Вложений с метаданными: " + (pack.attachments || []).length).appendTo(this.spec_body);
+					this.table(this.spec_body,["Операция", "Рабочее место", "Норма времени, мин"],(pack.operations || []).map(row=>[row.operation,row.workstation,row.time_in_mins]));
+				} catch(error) { $("<p>Пакет недоступен для отображения.</p>").appendTo(this.spec_body); }
+			}
 			$("<p class='sv-help'></p>").text(data.notice || "Фиксация сохраняет текущие нормы задания. Ранее действовавшую версию BOM она не восстанавливает.").appendTo(this.spec_body);
 			if(data.state === "missing" && data.can_capture) $("<button type='button' class='btn btn-primary'>Зафиксировать текущие нормы</button>").appendTo(this.spec_body).on("click", () => this.load_specification(true));
 		} catch(error) { if(request === this.spec_request_id) this.spec_body.text("Состав не проверен. Проверьте права и сообщение ERPNext."); }

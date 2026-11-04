@@ -14,13 +14,13 @@ const operations = [
 ];
 const turn = () => new Promise(setImmediate);
 
-async function setup() {
+async function setup(optionOverrides = {}) {
 	const dom = new JSDOM("<!doctype html><html><body><div id='main'></div></body></html>", {url:"https://workshop.test/desk/svoenrav-workshop", runScripts:"outside-only"});
 	const $ = jquery(dom.window);
 	const calls = [];
 	const routes = [];
 	let handler = async (method) => {
-		if (method.endsWith("get_options")) return {operations, can_read_orders:true, can_read_work_orders:true, can_cutting:true};
+		if (method.endsWith("get_options")) return {operations, can_read_orders:true, can_read_work_orders:true, can_cutting:true,...optionOverrides};
 		throw new Error("Unexpected API: " + method);
 	};
 	dom.window.$ = $;
@@ -251,6 +251,20 @@ function card(name, text="Сумка") {
 		ui.dom.window.frappe.route_options={operation:"delete"};
 		ui.page.apply_route();
 		assert.equal(ui.page.operation_field.get_value(),"transfer","Unknown route option must not choose another operation");
+		const reserveUI=await setup({can_reserve:true});
+		try {
+			let confirmAction, finishReserve;
+			reserveUI.dom.window.frappe.confirm=(message,action)=>{confirmAction=action;};
+			reserveUI.setHandler((method)=>method.endsWith("reserve_queue") ? new Promise(resolve=>{finishReserve=resolve;}) : Promise.resolve({complete:true,checked_at:"NOW",scope:"TEST",orders:[]}));
+			await reserveUI.page.load_plan();
+			reserveUI.page.reserve_plan();
+			assert.equal(reserveUI.calls.filter(row=>row.method.endsWith("reserve_queue")).length,0,"Opening confirmation must not reserve stock");
+			confirmAction();confirmAction();
+			assert.equal(reserveUI.calls.filter(row=>row.method.endsWith("reserve_queue")).length,1,"Repeated confirmation must dispatch only one mutation");
+			finishReserve({count:1,created:[],notice:"TEST"});await turn();await turn();
+			assert.equal(reserveUI.page.reserve_busy,false);
+			assert.match(reserveUI.page.plan_body.text(),/Создано резервов: 1/);
+		} finally {reserveUI.dom.window.close();}
 		console.log("Workshop DOM checks: operation controls, duplicate click, failure recovery, stale card responses, text escaping, safe links, route validation, queue races, menu editor preservation and material report races/unknown values OK");
 	} finally {
 		ui.dom.window.close();

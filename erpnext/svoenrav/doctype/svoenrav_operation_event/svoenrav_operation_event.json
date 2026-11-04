@@ -1,0 +1,125 @@
+{
+ "doctype": "DocType",
+ "name": "SVOENRAV Operation Event",
+ "module": "SVOENRAV",
+ "autoname": "hash",
+ "field_order": [
+  "reference_doctype",
+  "reference_name",
+  "company",
+  "action",
+  "actor",
+  "payload",
+  "fingerprint",
+  "previous_hash",
+  "before_payload"
+ ],
+ "fields": [
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Тип документа",
+   "read_only": 1,
+   "options": "DocType"
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Документ",
+   "read_only": 1,
+   "options": "reference_doctype"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Компания",
+   "read_only": 1,
+   "options": "Company"
+  },
+  {
+   "fieldname": "action",
+   "fieldtype": "Data",
+   "label": "Событие",
+   "read_only": 1
+  },
+  {
+   "fieldname": "actor",
+   "fieldtype": "Link",
+   "label": "Пользователь",
+   "read_only": 1,
+   "options": "User"
+  },
+  {
+   "fieldname": "payload",
+   "fieldtype": "Code",
+   "label": "Состояние",
+   "read_only": 1,
+   "options": "JSON"
+  },
+  {
+   "fieldname": "fingerprint",
+   "fieldtype": "Data",
+   "label": "SHA-256 записи",
+   "read_only": 1
+  },
+  {
+   "fieldname": "previous_hash",
+   "fieldtype": "Data",
+   "label": "SHA-256 предыдущей записи",
+   "read_only": 1
+  },
+  {
+   "fieldname": "before_payload",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Предыдущее состояние",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1
+  },
+  {
+   "role": "Manufacturing User",
+   "read": 1
+  },
+  {
+   "role": "Manufacturing Manager",
+   "read": 1
+  },
+  {
+   "role": "Stock User",
+   "read": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
+  },
+  {
+   "role": "SVOENRAV Operator",
+   "read": 1
+  },
+  {
+   "role": "SVOENRAV Planner",
+   "read": 1
+  },
+  {
+   "role": "SVOENRAV Finance",
+   "read": 1
+  },
+  {
+   "role": "SVOENRAV Owner",
+   "read": 1
+  }
+ ]
+}

@@ -1,0 +1,84 @@
+{
+ "doctype": "DocType",
+ "name": "SVOENRAV Payment Allocation",
+ "module": "SVOENRAV",
+ "autoname": "hash",
+ "track_changes": 1,
+ "fields": [
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "options": "Payment Entry",
+   "reqd": 1,
+   "label": "Платёж"
+  },
+  {
+   "fieldname": "payment_reference",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "label": "Имя строки references платежа"
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "options": "Sales Order",
+   "reqd": 1,
+   "label": "Заказ"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "options": "currency",
+   "reqd": 1,
+   "label": "Доля в валюте счёта контрагента"
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "options": "Currency",
+   "read_only": 1,
+   "label": "Валюта"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "options": "Company",
+   "read_only": 1,
+   "label": "Компания"
+  }
+ ],
+ "field_order": [
+  "payment_entry",
+  "payment_reference",
+  "sales_order",
+  "amount",
+  "currency",
+  "company"
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "SVOENRAV Finance",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "SVOENRAV Owner",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  }
+ ]
+}

@@ -2,6 +2,7 @@ name: SVOENRAV source checks
 on:
   push:
     paths:
+      - 'erpnext/hooks.py'
       - 'erpnext/svoenrav/**'
       - 'erpnext/www/svoenrav/**'
       - 'tools/svoenrav.py'
@@ -12,6 +13,7 @@ on:
       - '.github/workflows/svoenrav-checks.yml'
   pull_request:
     paths:
+      - 'erpnext/hooks.py'
       - 'erpnext/svoenrav/**'
       - 'erpnext/www/svoenrav/**'
       - 'tools/svoenrav.py'
@@ -62,3 +64,18 @@ jobs:
         run: |
           NODE_PATH="$RUNNER_TEMP/svoenrav-ui/node_modules" node tests/svoenrav/workshop_ui.cjs
           NODE_PATH="$RUNNER_TEMP/svoenrav-ui/node_modules" node tests/svoenrav/preview_ui.cjs
+
+  browser-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated browser dependencies
+        run: |
+          npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/svoenrav-browser" playwright@1.56.1
+          node "$RUNNER_TEMP/svoenrav-browser/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Test responsive preview in real Chromium
+        run: NODE_PATH="$RUNNER_TEMP/svoenrav-browser/node_modules" node tests/svoenrav/browser_ui.cjs

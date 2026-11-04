@@ -2,6 +2,7 @@
 """Read existing native Version status changes, never fabricate missing events."""
 import json
 import frappe
+from erpnext.svoenrav.flow import visible_dict
 from frappe.utils import get_url_to_form
 from erpnext.svoenrav.portal import require_staff
 from erpnext.svoenrav.workshop import _source, get_order_card
@@ -23,7 +24,9 @@ def visible_changes(payload, visible_fields):
 def get_order_history(sales_order):
 	require_staff()
 	_source("Sales Order", sales_order)  # Check the requested order before Version queries.
-	if not frappe.has_permission("Version", ptype="read"):
+	version_access = bool(frappe.has_permission("Version", ptype="read"))
+	audit_access = bool(frappe.has_permission("SVOENRAV Operation Event", ptype="read"))
+	if not version_access and not audit_access:
 		return {"allowed": False, "rows": [], "partial": True, "notice": "Нет права чтения истории Version. Последние состояния смотрите в карточке; история не восстанавливается предположениями."}
 	card = get_order_card(sales_order)
 	refs = [("Sales Order", card["order"]["name"])]
@@ -33,6 +36,11 @@ def get_order_history(sales_order):
 		partial |= bool(section.get("has_more") or not section.get("allowed"))
 		if section.get("allowed"):
 			refs.extend((doctype, row["name"]) for row in section["rows"])
+	if frappe.has_permission("SVOENRAV Payment Allocation", ptype="read"):
+		table = frappe.qb.DocType("SVOENRAV Payment Allocation")
+		allocations = frappe.qb.from_(table).select(table.name).where(table.sales_order == card["order"]["name"]).limit(51).run(as_dict=True)
+		partial |= len(allocations) > 50
+		refs.extend(("SVOENRAV Payment Allocation", row["name"]) for row in allocations[:50])
 	refs = list(dict.fromkeys(refs))
 	partial |= len(refs) > 50
 	events = []
@@ -42,9 +50,28 @@ def get_order_history(sales_order):
 		except frappe.PermissionError:
 			partial = True
 			continue
-		versions = frappe.get_list("Version", filters={"ref_doctype": doctype, "docname": name}, fields=["creation", "data"], order_by="creation desc, name desc", limit_page_length=21)
+		versions = frappe.get_list("Version", filters={"ref_doctype": doctype, "docname": name}, fields=["creation", "data"], order_by="creation desc, name desc", limit_page_length=21) if version_access else []
+		if audit_access:
+			audit_rows = audit_events(doctype, name, visible_dict(doc))
+			partial |= audit_rows["partial"]
+			events.extend(audit_rows["rows"])
 		partial |= len(versions) > 20
 		for version in versions[:20]:
-			for change in visible_changes(version.get("data"), doc.as_dict()):
+			for change in visible_changes(version.get("data"), visible_dict(doc)):
 				events.append({**change, "at": version.get("creation"), "doctype": doctype, "name": name, "url": get_url_to_form(doctype, name)})
-	return {"allowed": True, "rows": sorted(events, key=lambda r: (str(r["at"] or ""), r["doctype"], r["name"], r["field"]), reverse=True), "partial": bool(partial), "notice": "Только записанные в Version изменения доступных полей состояния: до 50 документов и 20 последних версий каждого. Изменения без записи Version здесь отсутствуют; отсутствие строк не означает отсутствия изменений."}
+	return {"allowed": True, "rows": sorted(events, key=lambda r: (str(r["at"] or ""), r["doctype"], r["name"], r["field"]), reverse=True), "partial": bool(partial), "notice": "Серверный журнал SVOENRAV и доступные записи Version. До 50 документов, 50 записей журнала и 20 версий каждого. Журнал действует после установки обновления; события без обработчиков (например прямой SQL) не восстанавливаются."}
+
+
+def audit_events(doctype, name, visible_fields):
+	from erpnext.svoenrav.events import FIELDS, VIRTUAL, visible_audit_fields
+	allowed = set(FIELDS) | {row[1] for rows in VIRTUAL.values() for row in rows}
+	visible_fields = visible_audit_fields(doctype, visible_fields)
+	table = frappe.qb.DocType('SVOENRAV Operation Event')
+	rows = frappe.qb.from_(table).select(table.creation,table.payload,table.before_payload,table.action).where((table.reference_doctype == doctype) & (table.reference_name == name)).orderby(table.creation, order=frappe.qb.desc).orderby(table.name, order=frappe.qb.desc).limit(51).run(as_dict=True)
+	result = []
+	for row in rows[:50]:
+		before, after = json.loads(row['before_payload'] or '{}'), json.loads(row['payload'] or '{}')
+		for field in sorted(set(before) | set(after)):
+			if field in allowed and field in visible_fields and before.get(field) != after.get(field):
+				result.append({'at':row['creation'],'doctype':doctype,'name':name,'url':get_url_to_form(doctype,name),'field':field,'before':before.get(field),'after':after.get(field),'source':'SVOENRAV','action':row['action']})
+	return {'rows':result,'partial':len(rows)>50}
