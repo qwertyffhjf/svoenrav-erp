@@ -1,0 +1,9 @@
+.git
+.github
+.svoenrav
+**/__pycache__
+**/*.pyc
+**/node_modules
+**/.DS_Store
+*.zip
+*.tar.gz

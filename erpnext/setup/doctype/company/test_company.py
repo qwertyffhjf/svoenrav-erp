@@ -1,0 +1,285 @@
+# Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
+# License: GNU General Public License v3. See license.txt
+import json
+from unittest.mock import patch
+
+import frappe
+from frappe import _
+from frappe.utils import random_string
+from frappe.utils.nestedset import get_root_of
+
+from erpnext.accounts.doctype.account.chart_of_accounts.chart_of_accounts import (
+	get_charts_for_country,
+)
+from erpnext.setup.doctype.company.company import get_default_company_address
+from erpnext.tests.utils import ERPNextTestSuite
+
+
+class TestCompany(ERPNextTestSuite):
+	def test_coa_based_on_existing_company(self):
+		company = frappe.new_doc("Company")
+		company.company_name = "COA from Existing Company"
+		company.abbr = "CFEC"
+		company.default_currency = "INR"
+		company.create_chart_of_accounts_based_on = "Existing Company"
+		company.existing_company = "_Test Company"
+		company.country = "India"
+		company.save()
+
+		expected_results = {
+			"Debtors - CFEC": {
+				"account_type": "Receivable",
+				"is_group": 0,
+				"root_type": "Asset",
+				"parent_account": "Accounts Receivable - CFEC",
+			},
+			"Cash - CFEC": {
+				"account_type": "Cash",
+				"is_group": 0,
+				"root_type": "Asset",
+				"parent_account": "Cash In Hand - CFEC",
+			},
+		}
+
+		for account, acc_property in expected_results.items():
+			acc = frappe.get_doc("Account", account)
+			for prop, val in acc_property.items():
+				self.assertEqual(acc.get(prop), val)
+
+		frappe.delete_doc("Company", "COA from Existing Company")
+
+	def test_coa_based_on_country_template(self):
+		countries = ["Canada", "Germany", "France"]
+
+		for country in countries:
+			templates = get_charts_for_country(country)
+			if len(templates) != 1 and "Standard" in templates:
+				templates.remove("Standard")
+
+			self.assertTrue(templates)
+
+			for company in frappe.db.get_all("Company", {"company_name": ["in", templates]}):
+				frappe.delete_doc("Company", company.name)
+
+			for template in templates:
+				try:
+					company = frappe.new_doc("Company")
+					company.company_name = template
+					company.abbr = random_string(3)
+					company.default_currency = "USD"
+					company.create_chart_of_accounts_based_on = "Standard Template"
+					company.chart_of_accounts = template
+					company.country = country
+					company.save()
+
+					account_types = [
+						"Cost of Goods Sold",
+						"Depreciation",
+						"Expenses Included In Valuation",
+						"Fixed Asset",
+						"Payable",
+						"Receivable",
+						"Stock Adjustment",
+						"Stock Received But Not Billed",
+						"Bank",
+						"Cash",
+						"Stock",
+					]
+
+					for account_type in account_types:
+						filters = {"company": template, "account_type": account_type}
+						if account_type in ["Bank", "Cash"]:
+							filters["is_group"] = 1
+
+						has_matching_accounts = frappe.get_all("Account", filters)
+						error_message = _("No Account matched these filters: {}").format(json.dumps(filters))
+
+						self.assertTrue(has_matching_accounts, msg=error_message)
+				finally:
+					frappe.delete_doc("Company", template)
+
+	def test_basic_tree(self, records=None):
+		self.load_test_records("Company")
+		min_lft = 1
+		max_rgt = frappe.db.sql("select max(rgt) from `tabCompany`")[0][0]
+
+		if not records:
+			records = self.globalTestRecords["Company"][2:]
+
+		for company in records:
+			lft, rgt, parent_company = frappe.db.get_value(
+				"Company", company.get("company_name"), ["lft", "rgt", "parent_company"]
+			)
+
+			if parent_company:
+				parent_lft, parent_rgt = frappe.db.get_value("Company", parent_company, ["lft", "rgt"])
+			else:
+				# root
+				parent_lft = min_lft - 1
+				parent_rgt = max_rgt + 1
+
+			self.assertTrue(lft)
+			self.assertTrue(rgt)
+			self.assertTrue(lft < rgt)
+			self.assertTrue(parent_lft < parent_rgt)
+			self.assertTrue(lft > parent_lft)
+			self.assertTrue(rgt < parent_rgt)
+			self.assertTrue(lft >= min_lft)
+			self.assertTrue(rgt <= max_rgt)
+
+	def test_primary_address(self):
+		company = "_Test Company"
+
+		secondary = frappe.get_doc(
+			{
+				"address_title": "Non Primary",
+				"doctype": "Address",
+				"address_type": "Billing",
+				"address_line1": "Something",
+				"city": "Mumbai",
+				"state": "Maharashtra",
+				"country": "India",
+				"is_primary_address": 1,
+				"pincode": "400098",
+				"links": [
+					{
+						"link_doctype": "Company",
+						"link_name": company,
+					}
+				],
+			}
+		)
+		secondary.insert()
+		self.addCleanup(secondary.delete)
+
+		primary = frappe.copy_doc(secondary)
+		primary.is_primary_address = 1
+		primary.insert()
+		self.addCleanup(primary.delete)
+
+		self.assertEqual(get_default_company_address(company), primary.name)
+
+	def get_no_of_children(self, company):
+		def get_no_of_children(companies, no_of_children):
+			children = []
+			for company in companies:
+				children += frappe.db.sql_list(
+					"""select name from `tabCompany`
+				where ifnull(parent_company, '')=%s""",
+					company or "",
+				)
+
+			if len(children):
+				return get_no_of_children(children, no_of_children + len(children))
+			else:
+				return no_of_children
+
+		return get_no_of_children([company], 0)
+
+	def test_default_departments_ignore_session_translations(self):
+		self.assertEqual(get_root_of("Department"), "All Departments")
+
+		translations = {"All Departments": "Alle Abteilungen", "Accounts": "Buchhaltung"}
+		with patch("frappe.translate.get_all_translations", return_value=translations):
+			company = frappe.new_doc("Company")
+			company.company_name = "Dept Translation Test Co"
+			company.abbr = "DTTC"
+			company.default_currency = "INR"
+			company.country = "India"
+			company.insert()
+
+		self.assertFalse(frappe.db.exists("Department", "Alle Abteilungen"))
+		self.assertEqual(
+			frappe.get_all("Department", filters={"parent_department": ("is", "not set")}, pluck="name"),
+			["All Departments"],
+		)
+
+		departments = frappe.get_all(
+			"Department", filters={"company": company.name}, fields=["name", "parent_department"]
+		)
+		self.assertTrue(departments)
+		self.assertEqual({d.parent_department for d in departments}, {"All Departments"})
+		self.assertIn("Buchhaltung - DTTC", [d.name for d in departments])
+
+	def test_change_parent_company(self):
+		child_company = frappe.get_doc("Company", "_Test Company 5")
+
+		# changing parent of company
+		child_company.parent_company = "_Test Company 3"
+		child_company.save()
+		self.test_basic_tree()
+
+		# move it back
+		child_company.parent_company = "_Test Company 4"
+		child_company.save()
+		self.test_basic_tree()
+
+	def test_clear_demo_data(self):
+		from erpnext.setup.demo import clear_demo_data, read_data_file_using_hooks
+
+		company = frappe.get_doc(
+			{
+				"doctype": "Company",
+				"company_name": "_Test Company (Demo)",
+				"abbr": "_TCD",
+				"default_currency": "INR",
+				"country": "India",
+			}
+		).insert()
+		frappe.db.set_single_value("Global Defaults", "demo_company", company.name)
+		for doctype in frappe.get_hooks("demo_master_doctypes"):
+			for record in json.loads(read_data_file_using_hooks(doctype)):
+				frappe.get_doc(record).insert(ignore_if_duplicate=True)
+
+		clear_demo_data()
+
+		self.assertFalse(frappe.db.exists("Company", company.name))
+		self.assertFalse(frappe.db.get_single_value("Global Defaults", "demo_company"))
+		self.assertFalse(frappe.db.exists("Customer", {"customer_name": "Grant Plastics Ltd."}))
+		self.assertFalse(frappe.db.exists("Item", "SKU001"))
+
+
+def create_company_communication(doctype, docname):
+	comm = frappe.get_doc(
+		{
+			"doctype": "Communication",
+			"communication_type": "Communication",
+			"content": "Deduplication of Links",
+			"communication_medium": "Email",
+			"reference_doctype": doctype,
+			"reference_name": docname,
+		}
+	)
+	comm.insert()
+
+
+def create_child_company():
+	child_company = frappe.db.exists("Company", "Test Company")
+	if not child_company:
+		child_company = frappe.get_doc(
+			{
+				"doctype": "Company",
+				"company_name": "Test Company",
+				"abbr": "test_company",
+				"default_currency": "INR",
+			}
+		)
+		child_company.insert()
+	else:
+		child_company = frappe.get_doc("Company", child_company)
+
+	return child_company.name
+
+
+def create_test_lead_in_company(company):
+	lead = frappe.db.exists("Lead", "Test Lead in new company")
+	if not lead:
+		lead = frappe.get_doc(
+			{"doctype": "Lead", "lead_name": "Test Lead in new company", "scompany": company}
+		)
+		lead.insert()
+	else:
+		lead = frappe.get_doc("Lead", lead)
+		lead.company = company
+		lead.save()
+	return lead.name

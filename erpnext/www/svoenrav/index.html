@@ -1,0 +1,56 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ brand_name | e }}{% endblock %}
+
+{% block style %}
+<style>
+.sv-app{--sv-brand:{{ brand_colour | e }};max-width:1100px;margin:0 auto;padding:24px 0 48px;color:#24372f}
+.sv-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:28px}
+.sv-head h1{font-size:30px;letter-spacing:.12em;font-weight:700;margin:0 0 8px;color:var(--sv-brand)}
+.sv-head p{margin:0;color:#637168;font-size:16px}.sv-links{display:flex;flex-wrap:wrap;gap:16px;align-items:center}
+.sv-links a{color:var(--sv-brand);text-decoration:underline;min-height:44px;display:inline-flex;align-items:center}
+.sv-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.sv-action{display:flex;flex-direction:column;gap:8px;padding:22px;min-height:130px;background:#f3f5f0;border:1px solid #dce3da;border-radius:12px;color:#24372f;text-decoration:none}
+.sv-action:hover,.sv-action:focus{border-color:var(--sv-brand);color:var(--sv-brand);text-decoration:none;background:#eaf0e7}
+.sv-action strong{font-size:19px;font-weight:600}.sv-action span{font-size:15px;color:#637168}
+.sv-section{margin-top:36px}.sv-section h2{font-size:21px;margin-bottom:16px}.sv-jobs{display:flex;flex-direction:column;gap:10px}
+.sv-job{padding:16px 0;border-bottom:1px solid #dce3da;display:flex;justify-content:space-between;gap:14px;color:#24372f;flex-wrap:wrap}
+.sv-job strong{display:block}.sv-job small{display:block;font-size:14px;color:#637168}.sv-empty{padding:16px 0;color:#637168}
+.sv-footer{margin-top:32px;padding-top:20px;border-top:1px solid #dce3da;color:#637168;font-size:14px}
+@media(max-width:760px){.sv-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.sv-head h1{font-size:26px}.sv-action{padding:18px;min-height:136px}}
+@media(max-width:390px){.sv-actions{grid-template-columns:1fr}.sv-app{padding-top:16px}.sv-action{min-height:102px}}
+</style>
+{% endblock %}
+
+{% block page_content %}
+<main class="sv-app">
+ <header class="sv-head">
+  <div><h1>{{ brand_name | e }}</h1><p>{{ brand_description | e }}</p></div>
+  <nav class="sv-links" aria-label="Управление системой">
+   <a href="/desk">Все модули ERP</a>
+   {% if can_configure %}<a href="{{ settings_url | e }}">Настроить SVOENRAV</a>{% endif %}
+  </nav>
+ </header>
+ <section class="sv-actions" aria-label="Действия мастерской">
+ {% for action in actions %}
+  <a class="sv-action" href="{{ action.url | e }}"><strong>{{ action.label | e }}</strong><span>{{ action.description | e }}</span></a>
+ {% endfor %}
+ </section>
+ {% if not actions %}<p class="sv-empty">Нет доступных действий. Проверьте меню и права пользователя.</p>{% endif %}
+ <section class="sv-section" aria-labelledby="sv-jobs-heading">
+  <h2 id="sv-jobs-heading">В производстве</h2>
+  <div class="sv-jobs">
+   {% for job in work_orders %}
+   <a class="sv-job" href="{{ job.url | e }}">
+    <div><strong>{{ job.item_name | e }}</strong><small>{{ job.name | e }}</small></div>
+    <div>Готово {{ job.produced_qty }} из {{ job.qty }}{% if job.expected_delivery_date %}<small>Срок: {{ job.expected_delivery_date }}</small>{% endif %}</div>
+   </a>
+   {% else %}<p class="sv-empty">Нет доступных открытых заданий. Состав изделия и нормы задаются в спецификации.</p>{% endfor %}
+  </div>
+ </section>
+ <footer class="sv-footer">
+  {% if can_configure %}<p>Добавить свои поля и изменить форму: <a href="{{ customise_url | e }}">Customize Form</a>.</p>{% endif %}
+  <p>SVOENRAV · собственная копия открытой ERPNext · GNU GPL v3</p>
+ </footer>
+</main>
+{% endblock %}
