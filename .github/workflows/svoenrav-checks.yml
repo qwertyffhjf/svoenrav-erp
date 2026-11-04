@@ -35,3 +35,17 @@ jobs:
         run: python tools/svoenrav.py check --source-only
       - name: Test SVOENRAV helpers without installing ERPNext
         run: python -m unittest discover -s tests/svoenrav -v
+  interface-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check page script syntax
+        run: node --check erpnext/svoenrav/page/svoenrav_workshop/svoenrav_workshop.js
+      - name: Install isolated DOM test dependencies
+        run: npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/svoenrav-ui" jsdom@26.1.0 jquery@3.7.1
+      - name: Check interface behavior without ERPNext
+        run: NODE_PATH="$RUNNER_TEMP/svoenrav-ui/node_modules" node tests/svoenrav/workshop_ui.cjs

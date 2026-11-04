@@ -1,12 +1,18 @@
 import importlib.util
 import json
+import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("svoenrav_menu", ROOT / "erpnext/svoenrav/menu.py")
 menu = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(menu)
+flow_spec = importlib.util.spec_from_file_location("erpnext.svoenrav.flow", ROOT / "erpnext/svoenrav/flow.py")
+flow = importlib.util.module_from_spec(flow_spec)
+flow_spec.loader.exec_module(flow)
+with patch.dict(sys.modules, {"erpnext.svoenrav.flow": flow}):
+	spec.loader.exec_module(menu)
 
 
 class MenuTests(unittest.TestCase):
@@ -14,8 +20,8 @@ class MenuTests(unittest.TestCase):
 		first = menu.normalise_actions(None)
 		first[0]["label"] = "Changed"
 		self.assertEqual(menu.normalise_actions("")[0]["label"], "Новый заказ")
-		first[2]["defaults"]["stock_entry_type"] = "Changed"
-		self.assertEqual(menu.normalise_actions(None)[2]["defaults"]["stock_entry_type"], "Material Issue")
+		first[2]["operation"] = "Changed"
+		self.assertEqual(menu.normalise_actions(None)[2]["operation"], "transfer")
 
 	def test_stock_entry_presets_and_sections(self):
 		rows = [{"label": "Списание", "doctype": "Stock Entry", "mode": "new", "section": "quick", "defaults": {"stock_entry_type": "Material Issue"}}]
@@ -33,6 +39,9 @@ class MenuTests(unittest.TestCase):
 			{"defaults": {"stock_entry_type": "Material Issue"}, "mode": "list"},
 			{"defaults": {"stock_entry_type": "Material Issue"}, "doctype": "Sales Order"},
 			{"section": "<script>"},
+			{"operation": "receipt"},
+			{"operation": "transfer", "defaults": {"stock_entry_type": "Material Issue"}},
+			{"operation": []},
 		]:
 			with self.subTest(extra=extra), self.assertRaises(ValueError):
 				menu.normalise_actions([{**base, **extra}])

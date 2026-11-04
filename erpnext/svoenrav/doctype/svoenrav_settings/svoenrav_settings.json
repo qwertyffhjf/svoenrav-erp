@@ -36,12 +36,12 @@
    "fieldtype": "Code",
    "options": "JSON",
    "label": "Действия на стартовой странице",
-   "description": "Пустое поле включает стандартное меню. JSON-массив: label, description, doctype, mode (list/new), section (quick/modules). Без section — обычный раздел. [] скрывает все кнопки. Проверяются права пользователя."
+   "description": "Пустое поле включает стандартное меню. JSON: label, description, doctype, mode (list/new), section (quick/modules). operation: receipt/transfer/manufacture/delivery — только для соответствующего нового документа. [] скрывает кнопки."
   },
   {
    "fieldname": "help_html",
    "fieldtype": "HTML",
-   "options": "<p>Пример быстрого действия:</p><pre>[{&quot;label&quot;:&quot;Новый заказ&quot;,&quot;description&quot;:&quot;Заказ покупателя&quot;,&quot;doctype&quot;:&quot;Sales Order&quot;,&quot;mode&quot;:&quot;new&quot;,&quot;section&quot;:&quot;quick&quot;}]</pre><p>Для нового Stock Entry допустим defaults: {&quot;stock_entry_type&quot;:&quot;Material Issue&quot;}. Также допустимы Material Receipt и Material Transfer. Остальные поля предзаполнять через меню нельзя.</p><p>Поля форм — Customize Form. Права — Role Permission Manager. Нормы материалов — BOM. Выпуск открывается из Work Order. Сохранённое меню при обновлении не заменяется.</p>"
+   "options": "<p>Пример короткой формы:</p><pre>[{&quot;label&quot;:&quot;Выпуск изделия&quot;,&quot;doctype&quot;:&quot;Stock Entry&quot;,&quot;mode&quot;:&quot;new&quot;,&quot;section&quot;:&quot;quick&quot;,&quot;operation&quot;:&quot;manufacture&quot;}]</pre><p>Операции: receipt — Purchase Receipt; transfer и manufacture — Stock Entry; delivery — Delivery Note. Требуются права чтения источника и создания результата.</p><p>Для прямого открытия нового Stock Entry допустим defaults: {&quot;stock_entry_type&quot;:&quot;Material Issue&quot;}. Также допустимы Material Receipt и Material Transfer. defaults и operation не совмещаются.</p><p>Поля — Customize Form. Права — Role Permission Manager. Нормы — BOM. Сохранённое меню при обновлении не заменяется.</p>"
   }
  ],
  "issingle": 1,

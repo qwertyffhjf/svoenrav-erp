@@ -33,10 +33,14 @@ def load_portal(*, user="master", user_type="System User", permissions=None, act
 	utils.get_url_to_list = lambda doctype: utils.get_url_to_form(doctype)
 	menu_spec = importlib.util.spec_from_file_location("erpnext.svoenrav.menu", ROOT / "erpnext/svoenrav/menu.py")
 	menu = importlib.util.module_from_spec(menu_spec)
-	menu_spec.loader.exec_module(menu)
+	flow_spec = importlib.util.spec_from_file_location("erpnext.svoenrav.flow", ROOT / "erpnext/svoenrav/flow.py")
+	flow = importlib.util.module_from_spec(flow_spec)
+	flow_spec.loader.exec_module(flow)
+	with patch.dict(sys.modules, {"erpnext.svoenrav.flow": flow}):
+		menu_spec.loader.exec_module(menu)
 	portal_spec = importlib.util.spec_from_file_location("svoenrav_portal_under_test", ROOT / "erpnext/svoenrav/portal.py")
 	portal = importlib.util.module_from_spec(portal_spec)
-	with patch.dict(sys.modules, {"frappe": frappe, "frappe.utils": utils, "erpnext.svoenrav.menu": menu}):
+	with patch.dict(sys.modules, {"frappe": frappe, "frappe.utils": utils, "erpnext.svoenrav.menu": menu, "erpnext.svoenrav.flow": flow}):
 		portal_spec.loader.exec_module(portal)
 	return portal, frappe
 
@@ -65,12 +69,12 @@ class PortalPermissionTests(unittest.TestCase):
 		self.assertFalse(context["can_read_work_orders"])
 
 	def test_quick_actions_use_create_permission_and_safe_presets(self):
-		portal, frappe = load_portal(permissions={("Stock Entry", "create"): True, ("Stock Entry Type", "read"): True, ("Sales Order", "create"): True})
+		portal, frappe = load_portal(permissions={("Stock Entry", "create"): True, ("Stock Entry Type", "read"): True}, actions='[ {"label":"Списать материалы","doctype":"Stock Entry","mode":"new","section":"quick","defaults":{"stock_entry_type":"Material Issue"}} ]')
 		frappe.get_list.return_value = [{"name": "Списание материалов"}]
 		context = portal.get_page_context()
-		self.assertEqual([row["label"] for row in context["quick_actions"]], ["Новый заказ", "Списать материалы"])
+		self.assertEqual([row["label"] for row in context["quick_actions"]], ["Списать материалы"])
 		from urllib.parse import parse_qs, urlsplit
-		self.assertEqual(parse_qs(urlsplit(context["quick_actions"][1]["url"]).query), {"stock_entry_type": ["Списание материалов"]})
+		self.assertEqual(parse_qs(urlsplit(context["quick_actions"][0]["url"]).query), {"stock_entry_type": ["Списание материалов"]})
 		self.assertEqual(context["module_actions"], [])
 		self.assertEqual(frappe.get_list.call_args.kwargs["filters"], {"purpose": "Material Issue", "is_standard": 1})
 		self.assertNotIn("ignore_permissions", frappe.get_list.call_args.kwargs)
@@ -78,7 +82,7 @@ class PortalPermissionTests(unittest.TestCase):
 	def test_unavailable_stock_type_cannot_open_wrong_operation(self):
 		for can_read in (True, False):
 			with self.subTest(can_read=can_read):
-				portal, frappe = load_portal(permissions={("Stock Entry", "create"): True, ("Stock Entry Type", "read"): can_read})
+				portal, frappe = load_portal(permissions={("Stock Entry", "create"): True, ("Stock Entry Type", "read"): can_read}, actions='[ {"label":"Списать материалы","doctype":"Stock Entry","mode":"new","section":"quick","defaults":{"stock_entry_type":"Material Issue"}} ]')
 				context = portal.get_page_context()
 				self.assertEqual(context["quick_actions"], [])
 				self.assertEqual(len(context["action_warnings"]), 1)
@@ -90,6 +94,14 @@ class PortalPermissionTests(unittest.TestCase):
 		context = portal.get_page_context()
 		self.assertEqual(context["quick_actions"], [])
 		self.assertEqual([row["label"] for row in context["module_actions"]], ["Мои материалы"])
+
+	def test_guided_actions_require_source_read_and_target_create(self):
+		portal, frappe = load_portal(permissions={("Stock Entry", "create"): True})
+		self.assertEqual(portal.get_page_context()["quick_actions"], [])
+		portal, frappe = load_portal(permissions={("Stock Entry", "create"): True, ("Work Order", "read"): True})
+		context = portal.get_page_context()
+		self.assertEqual([row["operation"] for row in context["quick_actions"]], ["transfer", "manufacture"])
+		self.assertEqual(context["quick_actions"][1]["url"], "/desk/svoenrav-workshop?operation=manufacture")
 
 	def test_explicit_empty_menu_does_not_restore_default_actions(self):
 		portal, frappe = load_portal(actions="[]")

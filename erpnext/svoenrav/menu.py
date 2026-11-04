@@ -6,15 +6,18 @@ import json
 import re
 from copy import deepcopy
 
+from erpnext.svoenrav.flow import OPERATIONS
+
 # Only these harmless document presets may be placed in a link. No company,
 # warehouse, amount, status or permission flags may be supplied by menu JSON.
 STOCK_ENTRY_PRESETS = {"Material Issue", "Material Receipt", "Material Transfer"}
 
 DEFAULT_ACTIONS = (
 	{"label": "Новый заказ", "description": "Заказ покупателя и срок изготовления", "doctype": "Sales Order", "mode": "new", "section": "quick"},
-	{"label": "Приход материалов", "description": "Приёмка кожи и фурнитуры от поставщика", "doctype": "Purchase Receipt", "mode": "new", "section": "quick"},
-	{"label": "Списать материалы", "description": "Отдельное списание, не включённое в выпуск", "doctype": "Stock Entry", "mode": "new", "section": "quick", "defaults": {"stock_entry_type": "Material Issue"}},
-	{"label": "Выпуск изделия", "description": "Выберите производственное задание и оформите выпуск", "doctype": "Work Order", "mode": "list", "section": "quick"},
+	{"label": "Приход материалов", "description": "Приёмка по заказу поставщику", "doctype": "Purchase Receipt", "mode": "new", "section": "quick", "operation": "receipt"},
+	{"label": "Выдать в производство", "description": "Материалы на выбранное количество изделий", "doctype": "Stock Entry", "mode": "new", "section": "quick", "operation": "transfer"},
+	{"label": "Выпуск изделия", "description": "Подготовить выпуск из производственного задания", "doctype": "Stock Entry", "mode": "new", "section": "quick", "operation": "manufacture"},
+	{"label": "Отгрузить заказ", "description": "Подготовить отгрузку по заказу покупателя", "doctype": "Delivery Note", "mode": "new", "section": "quick", "operation": "delivery"},
 	{"label": "Заказы", "description": "Покупатели, сроки и исполнение заказов", "doctype": "Sales Order", "mode": "list"},
 	{"label": "Производство", "description": "Задания, материалы и выпуск", "doctype": "Work Order", "mode": "list"},
 	{"label": "Склад", "description": "Выдача, возврат остатков и перемещение", "doctype": "Stock Entry", "mode": "list"},
@@ -49,8 +52,8 @@ def normalise_actions(raw):
 		raise ValueError("Меню должно быть массивом из не более 30 действий.")
 	result = []
 	for row in raw:
-		if not isinstance(row, dict) or set(row) - {"label", "description", "doctype", "mode", "section", "defaults"}:
-			raise ValueError("Действие допускает только label, description, doctype, mode, section и defaults.")
+		if not isinstance(row, dict) or set(row) - {"label", "description", "doctype", "mode", "section", "defaults", "operation"}:
+			raise ValueError("Действие допускает только label, description, doctype, mode, section, defaults и operation.")
 		label = row.get("label")
 		doctype = row.get("doctype")
 		description = row.get("description", "")
@@ -64,6 +67,17 @@ def normalise_actions(raw):
 		if mode not in ("list", "new"):
 			raise ValueError("Допустимые режимы действия: list и new.")
 		action = {"label": label.strip(), "description": description, "doctype": doctype, "mode": mode}
+		if "operation" in row:
+			operation = row["operation"]
+			if (
+				not isinstance(operation, str)
+				or operation not in OPERATIONS
+				or OPERATIONS[operation]["target"] != doctype
+				or mode != "new"
+				or "defaults" in row
+			):
+				raise ValueError("Операция должна соответствовать типу нового документа и не может сочетаться с defaults.")
+			action["operation"] = operation
 		if "section" in row:
 			if row["section"] not in ("quick", "modules"):
 				raise ValueError("Раздел действия: quick или modules.")

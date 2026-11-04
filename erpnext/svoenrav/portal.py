@@ -7,6 +7,7 @@ import frappe
 from frappe.utils import get_url_to_form, get_url_to_list
 
 from erpnext.svoenrav.menu import normalise_actions, validate_colour
+from erpnext.svoenrav.flow import OPERATIONS
 
 
 def require_staff():
@@ -32,6 +33,12 @@ def get_page_context():
 			continue
 		permission = "create" if action["mode"] == "new" else "read"
 		if not frappe.has_permission(action["doctype"], ptype=permission):
+			continue
+		if action.get("operation"):
+			spec = OPERATIONS[action["operation"]]
+			if not frappe.has_permission(spec["source"], ptype="read"):
+				continue
+			visible.append({**action, "url": "/desk/svoenrav-workshop?" + urlencode({"operation": action["operation"]})})
 			continue
 		meta = frappe.get_meta(action["doctype"])
 		if action["mode"] == "new" and not meta.issingle:
@@ -78,6 +85,8 @@ def get_page_context():
 		"module_actions": [action for action in visible if action.get("section") != "quick"],
 		"work_orders": work_orders,
 		"can_read_work_orders": can_read_work_orders,
+		"workshop_url": "/desk/svoenrav-workshop",
+		"can_read_orders": bool(frappe.has_permission("Sales Order", ptype="read")),
 		"can_configure": "System Manager" in frappe.get_roles(),
 		"settings_url": get_url_to_form("SVOENRAV Settings"),
 		"customise_url": get_url_to_form("Customize Form"),

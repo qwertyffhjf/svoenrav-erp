@@ -41,6 +41,9 @@
  <div class="sv-layout">
   <nav class="sv-nav" aria-label="Главное меню">
    <a href="#sv-home">Главная</a>
+   <a href="{{ workshop_url | e }}">Быстрые операции</a>
+   {% if can_read_orders %}<a href="{{ workshop_url | e }}?view=order">Карточка заказа</a>{% endif %}
+   <a href="{{ workshop_url | e }}?view=policy">Учёт материалов</a>
    {% if quick_actions %}<a href="#sv-quick">Быстрые действия</a>{% endif %}
    {% if module_actions %}<a href="#sv-modules">Разделы мастерской</a>{% endif %}
    {% if can_read_work_orders %}<a href="#sv-jobs">В производстве</a>{% endif %}
