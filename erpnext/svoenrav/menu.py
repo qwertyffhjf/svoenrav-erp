@@ -4,17 +4,29 @@
 
 import json
 import re
+from copy import deepcopy
+
+# Only these harmless document presets may be placed in a link. No company,
+# warehouse, amount, status or permission flags may be supplied by menu JSON.
+STOCK_ENTRY_PRESETS = {"Material Issue", "Material Receipt", "Material Transfer"}
 
 DEFAULT_ACTIONS = (
-	{"label": "Принять материал", "description": "Кожа, фурнитура и другие поступления", "doctype": "Purchase Receipt", "mode": "new"},
+	{"label": "Новый заказ", "description": "Заказ покупателя и срок изготовления", "doctype": "Sales Order", "mode": "new", "section": "quick"},
+	{"label": "Приход материалов", "description": "Приёмка кожи и фурнитуры от поставщика", "doctype": "Purchase Receipt", "mode": "new", "section": "quick"},
+	{"label": "Списать материалы", "description": "Отдельное списание, не включённое в выпуск", "doctype": "Stock Entry", "mode": "new", "section": "quick", "defaults": {"stock_entry_type": "Material Issue"}},
+	{"label": "Выпуск изделия", "description": "Выберите производственное задание и оформите выпуск", "doctype": "Work Order", "mode": "list", "section": "quick"},
+	{"label": "Заказы", "description": "Покупатели, сроки и исполнение заказов", "doctype": "Sales Order", "mode": "list"},
 	{"label": "Производство", "description": "Задания, материалы и выпуск", "doctype": "Work Order", "mode": "list"},
-	{"label": "Складские операции", "description": "Выдача, возврат остатков, перемещение", "doctype": "Stock Entry", "mode": "list"},
-	{"label": "Продажи", "description": "Заказы покупателей и сроки", "doctype": "Sales Order", "mode": "list"},
+	{"label": "Склад", "description": "Выдача, возврат остатков и перемещение", "doctype": "Stock Entry", "mode": "list"},
+	{"label": "Закупки", "description": "Заказы поставщикам и сроки поступления", "doctype": "Purchase Order", "mode": "list"},
+	{"label": "Продажи и отгрузки", "description": "Передача готовых изделий покупателям", "doctype": "Delivery Note", "mode": "list"},
 	{"label": "Материалы и изделия", "description": "Номенклатура и варианты", "doctype": "Item", "mode": "list"},
 	{"label": "Состав и нормы", "description": "Спецификации материалов и операций", "doctype": "BOM", "mode": "list"},
 	{"label": "Номерные изделия", "description": "Серийные номера и история", "doctype": "Serial No", "mode": "list"},
 	{"label": "Деньги", "description": "Поступления и платежи", "doctype": "Payment Entry", "mode": "list"},
 	{"label": "Качество", "description": "Проверка материалов и готовых изделий", "doctype": "Quality Inspection", "mode": "list"},
+	{"label": "Счета покупателям", "description": "Выставленные счета и расчёты", "doctype": "Sales Invoice", "mode": "list"},
+	{"label": "Счета поставщиков", "description": "Закупочные документы и задолженность", "doctype": "Purchase Invoice", "mode": "list"},
 )
 
 
@@ -27,7 +39,7 @@ def validate_colour(value):
 
 def normalise_actions(raw):
 	if raw is None or raw == "":
-		return [dict(action) for action in DEFAULT_ACTIONS]
+		return deepcopy(list(DEFAULT_ACTIONS))
 	if isinstance(raw, str):
 		try:
 			raw = json.loads(raw)
@@ -37,8 +49,8 @@ def normalise_actions(raw):
 		raise ValueError("Меню должно быть массивом из не более 30 действий.")
 	result = []
 	for row in raw:
-		if not isinstance(row, dict) or set(row) - {"label", "description", "doctype", "mode"}:
-			raise ValueError("Действие допускает только label, description, doctype и mode.")
+		if not isinstance(row, dict) or set(row) - {"label", "description", "doctype", "mode", "section", "defaults"}:
+			raise ValueError("Действие допускает только label, description, doctype, mode, section и defaults.")
 		label = row.get("label")
 		doctype = row.get("doctype")
 		description = row.get("description", "")
@@ -51,5 +63,22 @@ def normalise_actions(raw):
 			raise ValueError("Укажите существующий тип документа, а не ссылку или скрипт.")
 		if mode not in ("list", "new"):
 			raise ValueError("Допустимые режимы действия: list и new.")
-		result.append({"label": label.strip(), "description": description, "doctype": doctype, "mode": mode})
+		action = {"label": label.strip(), "description": description, "doctype": doctype, "mode": mode}
+		if "section" in row:
+			if row["section"] not in ("quick", "modules"):
+				raise ValueError("Раздел действия: quick или modules.")
+			action["section"] = row["section"]
+		if "defaults" in row:
+			defaults = row["defaults"]
+			if (
+				doctype != "Stock Entry"
+				or mode != "new"
+				or not isinstance(defaults, dict)
+				or set(defaults) != {"stock_entry_type"}
+				or not isinstance(defaults["stock_entry_type"], str)
+				or defaults["stock_entry_type"] not in STOCK_ENTRY_PRESETS
+			):
+				raise ValueError("Предзаполнение допускает только тип нового складского документа: Material Issue, Material Receipt или Material Transfer.")
+			action["defaults"] = dict(defaults)
+		result.append(action)
 	return result

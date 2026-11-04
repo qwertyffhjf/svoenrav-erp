@@ -26,6 +26,7 @@ def get_page_context():
 		# Fail visibly rather than silently replacing a saved menu with defaults.
 		frappe.throw("Проверьте настройки стартовой страницы SVOENRAV.", frappe.ValidationError)
 	visible = []
+	action_warnings = []
 	for action in actions:
 		if not frappe.db.exists("DocType", action["doctype"]):
 			continue
@@ -38,9 +39,26 @@ def get_page_context():
 			url = get_url_to_form(action["doctype"], name)
 		else:
 			url = get_url_to_list(action["doctype"])
+		if action.get("defaults"):
+			# Setup fixtures translate Stock Entry Type names. Resolve the standard
+			# type by its stable purpose instead of assuming its English name exists.
+			types = []
+			if frappe.has_permission("Stock Entry Type", ptype="read"):
+				types = frappe.get_list(
+					"Stock Entry Type",
+					filters={"purpose": action["defaults"]["stock_entry_type"], "is_standard": 1},
+					fields=["name"],
+					order_by="name asc",
+					limit_page_length=1,
+				)
+			if not types:
+				action_warnings.append("Действие «" + action["label"] + "» недоступно: проверьте стандартные типы складских операций и права доступа.")
+				continue
+			url += "?" + urlencode({"stock_entry_type": types[0]["name"]})
 		visible.append({**action, "url": url})
 	work_orders = []
-	if frappe.has_permission("Work Order", ptype="read"):
+	can_read_work_orders = frappe.has_permission("Work Order", ptype="read")
+	if can_read_work_orders:
 		work_orders = frappe.get_list(
 			"Work Order",
 			filters={"docstatus": 1, "status": ["not in", ["Completed", "Stopped", "Closed", "Cancelled"]]},
@@ -55,7 +73,11 @@ def get_page_context():
 		"brand_description": settings.description or "Кожевенная мастерская",
 		"brand_colour": colour,
 		"actions": visible,
+		"action_warnings": action_warnings,
+		"quick_actions": [action for action in visible if action.get("section") == "quick"],
+		"module_actions": [action for action in visible if action.get("section") != "quick"],
 		"work_orders": work_orders,
+		"can_read_work_orders": can_read_work_orders,
 		"can_configure": "System Manager" in frappe.get_roles(),
 		"settings_url": get_url_to_form("SVOENRAV Settings"),
 		"customise_url": get_url_to_form("Customize Form"),

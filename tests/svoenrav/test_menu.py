@@ -13,7 +13,41 @@ class MenuTests(unittest.TestCase):
 	def test_defaults_are_independent(self):
 		first = menu.normalise_actions(None)
 		first[0]["label"] = "Changed"
-		self.assertEqual(menu.normalise_actions("")[0]["label"], "Принять материал")
+		self.assertEqual(menu.normalise_actions("")[0]["label"], "Новый заказ")
+		first[2]["defaults"]["stock_entry_type"] = "Changed"
+		self.assertEqual(menu.normalise_actions(None)[2]["defaults"]["stock_entry_type"], "Material Issue")
+
+	def test_stock_entry_presets_and_sections(self):
+		rows = [{"label": "Списание", "doctype": "Stock Entry", "mode": "new", "section": "quick", "defaults": {"stock_entry_type": "Material Issue"}}]
+		self.assertEqual(menu.normalise_actions(json.dumps(rows))[0]["defaults"], rows[0]["defaults"])
+		self.assertEqual(menu.normalise_actions(list(menu.DEFAULT_ACTIONS)), list(menu.DEFAULT_ACTIONS))
+
+	def test_presets_cannot_set_amounts_statuses_or_arbitrary_fields(self):
+		base = {"label": "X", "doctype": "Stock Entry", "mode": "new"}
+		for extra in [
+			{"defaults": {"stock_entry_type": "Material Issue", "docstatus": 1}},
+			{"defaults": {"qty": 100}},
+			{"defaults": {"stock_entry_type": "Manufacture"}},
+			{"defaults": {"stock_entry_type": []}},
+			{"defaults": []},
+			{"defaults": {"stock_entry_type": "Material Issue"}, "mode": "list"},
+			{"defaults": {"stock_entry_type": "Material Issue"}, "doctype": "Sales Order"},
+			{"section": "<script>"},
+		]:
+			with self.subTest(extra=extra), self.assertRaises(ValueError):
+				menu.normalise_actions([{**base, **extra}])
+
+	def test_default_documents_and_presets_exist_in_this_checkout(self):
+		documents = {}
+		for path in (ROOT / "erpnext").glob("*/doctype/*/*.json"):
+			data = json.loads(path.read_text())
+			if isinstance(data, dict) and data.get("doctype") == "DocType":
+				documents[data["name"]] = data
+		for action in menu.DEFAULT_ACTIONS:
+			with self.subTest(action=action["label"]):
+				self.assertIn(action["doctype"], documents)
+				for field in action.get("defaults", {}):
+					self.assertIn(field, [row["fieldname"] for row in documents[action["doctype"]]["fields"]])
 
 	def test_custom_document_and_empty_menu(self):
 		rows = [{"label": "Моя форма", "doctype": "Свой документ", "mode": "new"}]

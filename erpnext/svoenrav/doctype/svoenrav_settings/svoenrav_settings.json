@@ -3,13 +3,46 @@
  "creation": "2026-11-04 00:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["brand_name", "description", "brand_colour", "actions_json", "help_html"],
+ "field_order": [
+  "brand_name",
+  "description",
+  "brand_colour",
+  "actions_json",
+  "help_html"
+ ],
  "fields": [
-  {"fieldname": "brand_name", "fieldtype": "Data", "label": "Название мастерской", "default": "SVOENRAV", "reqd": 1},
-  {"fieldname": "description", "fieldtype": "Small Text", "label": "Описание", "default": "Кожевенная мастерская"},
-  {"fieldname": "brand_colour", "fieldtype": "Color", "label": "Основной цвет", "default": "#21372F", "reqd": 1},
-  {"fieldname": "actions_json", "fieldtype": "Code", "options": "JSON", "label": "Действия на стартовой странице", "description": "Пустое поле включает стандартное меню. Для своего меню укажите JSON-массив. Режим: list или new. Доступ проверяется по правам пользователя."},
-  {"fieldname": "help_html", "fieldtype": "HTML", "options": "<p>Пример одного действия:</p><pre>[{&quot;label&quot;:&quot;Принять материал&quot;,&quot;description&quot;:&quot;Поступление от поставщика&quot;,&quot;doctype&quot;:&quot;Purchase Receipt&quot;,&quot;mode&quot;:&quot;new&quot;}]</pre><p>Поля форм изменяются через Customize Form. Права — через Role Permission Manager. Нормы материалов — через BOM.</p>"}
+  {
+   "fieldname": "brand_name",
+   "fieldtype": "Data",
+   "label": "Название мастерской",
+   "default": "SVOENRAV",
+   "reqd": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Описание",
+   "default": "Кожевенная мастерская"
+  },
+  {
+   "fieldname": "brand_colour",
+   "fieldtype": "Color",
+   "label": "Основной цвет",
+   "default": "#21372F",
+   "reqd": 1
+  },
+  {
+   "fieldname": "actions_json",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Действия на стартовой странице",
+   "description": "Пустое поле включает стандартное меню. JSON-массив: label, description, doctype, mode (list/new), section (quick/modules). Без section — обычный раздел. [] скрывает все кнопки. Проверяются права пользователя."
+  },
+  {
+   "fieldname": "help_html",
+   "fieldtype": "HTML",
+   "options": "<p>Пример быстрого действия:</p><pre>[{&quot;label&quot;:&quot;Новый заказ&quot;,&quot;description&quot;:&quot;Заказ покупателя&quot;,&quot;doctype&quot;:&quot;Sales Order&quot;,&quot;mode&quot;:&quot;new&quot;,&quot;section&quot;:&quot;quick&quot;}]</pre><p>Для нового Stock Entry допустим defaults: {&quot;stock_entry_type&quot;:&quot;Material Issue&quot;}. Также допустимы Material Receipt и Material Transfer. Остальные поля предзаполнять через меню нельзя.</p><p>Поля форм — Customize Form. Права — Role Permission Manager. Нормы материалов — BOM. Выпуск открывается из Work Order. Сохранённое меню при обновлении не заменяется.</p>"
+  }
  ],
  "issingle": 1,
  "modified": "2026-11-04 00:00:00",
@@ -17,7 +50,14 @@
  "module": "SVOENRAV",
  "name": "SVOENRAV Settings",
  "owner": "Administrator",
- "permissions": [{"role": "System Manager", "read": 1, "write": 1, "create": 1}],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  }
+ ],
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
