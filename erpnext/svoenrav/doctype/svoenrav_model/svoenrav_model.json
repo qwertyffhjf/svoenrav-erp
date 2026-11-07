@@ -1,0 +1,111 @@
+{
+ "doctype": "DocType",
+ "name": "SVOENRAV Model",
+ "module": "SVOENRAV",
+ "engine": "InnoDB",
+ "field_order": [
+  "model_code",
+  "title",
+  "item_code",
+  "numbered",
+  "archived",
+  "description",
+  "main_photo",
+  "photos"
+ ],
+ "fields": [
+  {
+   "fieldname": "model_code",
+   "fieldtype": "Data",
+   "label": "Артикул модели",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Название модели",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Номенклатура",
+   "options": "Item",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "numbered",
+   "fieldtype": "Check",
+   "label": "Присваивать номер каждому экземпляру",
+   "default": "1"
+  },
+  {
+   "fieldname": "archived",
+   "fieldtype": "Check",
+   "label": "В архиве",
+   "default": "0"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Описание и особенности"
+  },
+  {
+   "fieldname": "main_photo",
+   "fieldtype": "Attach Image",
+   "label": "Обложка"
+  },
+  {
+   "fieldname": "photos",
+   "fieldtype": "Table",
+   "label": "Галерея",
+   "options": "SVOENRAV Model Photo"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Manufacturing User",
+   "read": 1
+  },
+  {
+   "role": "Manufacturing Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "Stock User",
+   "read": 1
+  },
+  {
+   "role": "SVOENRAV Operator",
+   "read": 1
+  },
+  {
+   "role": "SVOENRAV Planner",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "SVOENRAV Owner",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  }
+ ],
+ "autoname": "field:model_code",
+ "title_field": "title",
+ "search_fields": "title,item_code",
+ "track_changes": 1
+}

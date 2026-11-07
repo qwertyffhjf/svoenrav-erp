@@ -1,0 +1,79 @@
+{
+ "doctype": "DocType",
+ "name": "SVOENRAV Product Sequence",
+ "module": "SVOENRAV",
+ "engine": "InnoDB",
+ "field_order": [
+  "series_key",
+  "enabled",
+  "confirmed",
+  "next_number",
+  "digits",
+  "last_issued",
+  "help_html"
+ ],
+ "fields": [
+  {
+   "fieldname": "series_key",
+   "fieldtype": "Data",
+   "label": "Последовательность",
+   "reqd": 1,
+   "unique": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Включить автоматическую нумерацию",
+   "default": "0"
+  },
+  {
+   "fieldname": "confirmed",
+   "fieldtype": "Check",
+   "label": "Начальный номер проверен по прежнему учёту",
+   "default": "0"
+  },
+  {
+   "fieldname": "next_number",
+   "fieldtype": "Int",
+   "label": "Следующий номер",
+   "default": "1",
+   "reqd": 1
+  },
+  {
+   "fieldname": "digits",
+   "fieldtype": "Int",
+   "label": "Минимальное количество цифр",
+   "default": "6",
+   "reqd": 1
+  },
+  {
+   "fieldname": "last_issued",
+   "fieldtype": "Int",
+   "label": "Последний присвоенный номер",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "help_html",
+   "fieldtype": "HTML",
+   "label": "",
+   "options": "<p>До первого выпуска задайте следующий свободный номер с учётом ранее изготовленных изделий. После первого выпуска последовательность нельзя сбросить или изменить формат. Отмена выпуска не освобождает номер.</p>"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "SVOENRAV Owner",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  }
+ ],
+ "autoname": "field:series_key"
+}

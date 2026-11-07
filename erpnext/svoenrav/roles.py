@@ -5,13 +5,17 @@ import frappe
 READ = ('read',)
 EDIT = ('read','write','create')
 POST = ('read','write','create','submit')
-COMMON = {name:READ for name in ('Company','Item','UOM','Warehouse','BOM','Work Order','SVOENRAV Specification Snapshot','SVOENRAV Operation Event')}
+COMMON = {name:READ for name in ('Company','Item','UOM','Warehouse','BOM','Work Order','SVOENRAV Specification Snapshot','SVOENRAV Operation Event','SVOENRAV Model','SVOENRAV Product Unit','Item Group')}
 PROFILES = {
  'SVOENRAV Operator': {**COMMON,'Stock Entry':EDIT,'SVOENRAV Cutting Draft':EDIT,'Stock Entry Type':READ},
  'SVOENRAV Planner': {**COMMON,'Work Order':POST,'Stock Entry':POST,'Stock Reservation Entry':POST,'Bin':READ,'SVOENRAV Cutting Draft':EDIT,'SVOENRAV Production Settings':('read','write'),'SVOENRAV Specification Snapshot':('read','create'),'Stock Entry Type':READ},
  'SVOENRAV Finance': {**COMMON,**{dt:READ for dt in ('Sales Order','Sales Invoice','Payment Entry','Customer','Currency')},'SVOENRAV Payment Allocation':('read','write','create')},
 }
 PROFILES['SVOENRAV Owner'] = {**PROFILES['SVOENRAV Planner'], **PROFILES['SVOENRAV Finance'], **{dt:POST for dt in ('Sales Order','Purchase Order','Purchase Receipt','Delivery Note','Sales Invoice','Payment Entry','BOM')},'SVOENRAV Specification Snapshot':('read','create'),'SVOENRAV Settings':('read','write'),'Work Order':POST,'Stock Entry':POST,**{dt:READ for dt in ('Account','Cost Center','Mode of Payment','Supplier','Address','Contact','Currency','Customer')}}
+
+
+PROFILES['SVOENRAV Planner'].update({'SVOENRAV Model':EDIT})
+PROFILES['SVOENRAV Owner'].update({'SVOENRAV Model':EDIT,'SVOENRAV Product Sequence':('read','write'),'Item':EDIT,'Serial No':READ})
 
 
 def install_profiles():

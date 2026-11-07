@@ -1,0 +1,25 @@
+{
+ "doctype": "DocType",
+ "name": "SVOENRAV Model Photo",
+ "module": "SVOENRAV",
+ "engine": "InnoDB",
+ "field_order": [
+  "image",
+  "caption"
+ ],
+ "fields": [
+  {
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "label": "Фотография",
+   "reqd": 1
+  },
+  {
+   "fieldname": "caption",
+   "fieldtype": "Data",
+   "label": "Подпись"
+  }
+ ],
+ "permissions": [],
+ "istable": 1
+}

@@ -89,7 +89,7 @@ welcome_email = "erpnext.setup.utils.welcome_email"
 setup_wizard_requires = "assets/erpnext/js/setup_wizard.js"
 setup_wizard_stages = "erpnext.setup.setup_wizard.setup_wizard.get_setup_stages"
 
-after_install = ["erpnext.setup.install.after_install", "erpnext.svoenrav.roles.install_profiles"]
+after_install = ["erpnext.setup.install.after_install", "erpnext.svoenrav.roles.install_profiles", "erpnext.svoenrav.products.setup"]
 before_install = "erpnext.svoenrav.roles.ensure_roles"
 before_migrate = "erpnext.svoenrav.roles.ensure_roles"
 
@@ -408,8 +408,8 @@ doc_events = {
 	},
 	"Stock Entry": {
 		"before_validate": "erpnext.svoenrav.transactions.guard_duplicate_draft",
-		"on_submit": "erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty",
-		"on_cancel": "erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty",
+		"on_submit": ["erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty", "erpnext.svoenrav.products.register_manufacture"],
+		"on_cancel": ["erpnext.stock.doctype.material_request.material_request.update_completed_and_requested_qty", "erpnext.svoenrav.products.cancel_manufacture"],
 	},
 	"User": {
 		"after_insert": "frappe.contacts.doctype.contact.contact.update_contact",
@@ -771,13 +771,15 @@ data_import_providers = {
 
 # SVOENRAV role definitions are installed without assigning users or changing
 # existing native roles. Source and field checks protect stored audit payloads.
-after_migrate = ["erpnext.svoenrav.roles.install_profiles"]
+after_migrate = ["erpnext.svoenrav.roles.install_profiles", "erpnext.svoenrav.products.setup"]
 permission_query_conditions.update({
     "SVOENRAV Payment Allocation": "erpnext.svoenrav.access.event_query",
     "SVOENRAV Operation Event": "erpnext.svoenrav.access.event_query",
     "SVOENRAV Specification Snapshot": "erpnext.svoenrav.access.snapshot_query",
 })
 has_permission.update({
+    "SVOENRAV Model": "erpnext.svoenrav.product_access.model_permission",
+    "SVOENRAV Product Unit": "erpnext.svoenrav.product_access.unit_permission",
     "SVOENRAV Payment Allocation": "erpnext.svoenrav.access.allocation_permission",
     "SVOENRAV Operation Event": "erpnext.svoenrav.access.event_permission",
     "SVOENRAV Specification Snapshot": "erpnext.svoenrav.access.snapshot_permission",

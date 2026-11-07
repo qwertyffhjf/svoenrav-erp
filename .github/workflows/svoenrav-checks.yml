@@ -38,7 +38,7 @@ jobs:
         with:
           python-version: '${{ matrix.python-version }}'
       - name: Install preview renderer
-        run: python -m pip install Jinja2==3.1.6
+        run: python -m pip install Jinja2==3.1.6 Pillow==11.3.0
       - name: Check standalone preview matches sources
         run: python tools/build_svoenrav_preview.py --check
       - name: Check source metadata without Docker

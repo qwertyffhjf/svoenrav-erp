@@ -7,8 +7,8 @@ import frappe
 
 INTERNAL = ContextVar('svoenrav_audit_write', default=False)
 DOCTYPE = 'SVOENRAV Operation Event'
-TRACKED = {'Sales Order','Purchase Order','Work Order','Stock Entry','Purchase Receipt','Delivery Note','Sales Invoice','Payment Entry','Stock Reservation Entry','SVOENRAV Cutting Draft','SVOENRAV Payment Allocation','SVOENRAV Specification Snapshot'}
-FIELDS = ('docstatus','status','qty','produced_qty','material_transferred_for_manufacturing','per_delivered','per_billed','reserved_qty','transferred_qty','consumed_qty','delivered_qty','outstanding_amount','advance_paid','amount','input_area','used_area','reusable_area','waste_area','bom_no','production_item','paid_amount','received_amount','payment_type')
+TRACKED = {'SVOENRAV Model','SVOENRAV Product Unit','SVOENRAV Product Sequence','Sales Order','Purchase Order','Work Order','Stock Entry','Purchase Receipt','Delivery Note','Sales Invoice','Payment Entry','Stock Reservation Entry','SVOENRAV Cutting Draft','SVOENRAV Payment Allocation','SVOENRAV Specification Snapshot'}
+FIELDS = ('docstatus','status','qty','produced_qty','material_transferred_for_manufacturing','per_delivered','per_billed','reserved_qty','transferred_qty','consumed_qty','delivered_qty','outstanding_amount','advance_paid','amount','input_area','used_area','reusable_area','waste_area','bom_no','production_item','paid_amount','received_amount','payment_type','enabled','confirmed','next_number','last_issued','digits','product_number','model','item_code','model_code','title','archived','numbered')
 
 
 def record_event(doc, method=None, deleted=False):

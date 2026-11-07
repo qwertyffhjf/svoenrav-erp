@@ -42,6 +42,7 @@
   <nav class="sv-nav" aria-label="Главное меню">
    <a href="#sv-home">Главная</a>
    <a href="{{ workshop_url | e }}">Быстрые операции</a>
+   {% if can_read_work_orders %}<a href="{{ workshop_url | e }}?view=catalog">Каталог моделей</a><a href="{{ workshop_url | e }}?view=units">Номерные изделия</a>{% endif %}
    {% if can_read_work_orders %}<a href="{{ workshop_url | e }}?view=queue">Очередь производства</a>{% endif %}
    {% if can_read_work_orders %}<a href="{{ workshop_url | e }}?view=materials">Материалы задания</a>{% endif %}
    {% if can_read_work_orders %}<a href="{{ workshop_url | e }}?view=cutting">Раскрой</a>{% endif %}

@@ -265,6 +265,39 @@ function card(name, text="Сумка") {
 			assert.equal(reserveUI.page.reserve_busy,false);
 			assert.match(reserveUI.page.plan_body.text(),/Создано резервов: 1/);
 		} finally {reserveUI.dom.window.close();}
+		const catalogUI=await setup({can_catalog:true,can_create_model:true,can_units:true});
+		try {
+			const page=catalogUI.page;
+			const model=(name,title=name)=>({name,title,model_code:name,item_code:"BAG",stock_uom:"шт",photos:[],can_edit:true,modified:"v1"});
+			const pending=[];catalogUI.setHandler(()=>new Promise(resolve=>pending.push(resolve)));
+			const listA=page.load_models(),listB=page.load_models();
+			pending[1]({rows:[model("NEW")],has_more:false});await listB;
+			pending[0]({rows:[model("STALE")],has_more:false});await listA;
+			assert.match(page.catalog_grid.text(),/NEW/);assert.doesNotMatch(page.catalog_grid.text(),/STALE/);
+			pending.length=0;
+			const openA=page.open_model("A"),openB=page.open_model("B");
+			pending[1](model("B","<img src=x onerror=alert(1)>"));await openB;
+			pending[0](model("A","STALE MODEL"));await openA;
+			assert.equal(page.catalog_detail.find("img").length,0);
+			assert.match(page.catalog_detail.text(),/<img/);assert.doesNotMatch(page.catalog_detail.text(),/STALE MODEL/);
+			page.model_editor();page.model_editor_fields.code.set_value("BAG-NEW");page.model_editor_fields.title.set_value("Сохранить ввод");
+			let rejectSave;catalogUI.setHandler(()=>new Promise((resolve,reject)=>{rejectSave=reject;}));
+			const save=page.catalog_detail.find("button").filter((_,el)=>el.textContent==="Сохранить модель");
+			const before=catalogUI.calls.length;save.trigger("click");save.trigger("click");
+			assert.equal(catalogUI.calls.length,before+1);rejectSave(new Error("Rejected"));await turn();
+			assert.equal(page.model_editor_fields.title.get_value(),"Сохранить ввод");assert.equal(save.prop("disabled"),false);
+			pending.length=0;catalogUI.setHandler(()=>new Promise(resolve=>pending.push(resolve)));
+			const unitsA=page.load_units(),unitsB=page.load_units();
+			pending[1]({rows:[],has_more:false,notice:"CURRENT UNITS"});await unitsB;
+			pending[0]({rows:[],has_more:false,notice:"STALE UNITS"});await unitsA;
+			assert.match(page.units_body.text(),/CURRENT UNITS/);assert.doesNotMatch(page.units_body.text(),/STALE UNITS/);
+			pending.length=0;
+			const unitA=page.open_unit("000001"),unitB=page.open_unit("000002");
+			const unit=name=>({name,model_title:"Сумка",status:"Выпущено",item_code:"BAG",manufacture_entry:"SE",source_url:"javascript:alert(1)",photo:"https://evil.test/photo.jpg"});
+			pending[1](unit("000002"));await unitB;pending[0](unit("000001"));await unitA;
+			assert.match(page.unit_detail.text(),/000002/);assert.doesNotMatch(page.unit_detail.text(),/000001/);
+			assert.equal(page.unit_detail.find("img,a[href^='javascript:']").length,0);
+		} finally {catalogUI.dom.window.close();}
 		console.log("Workshop DOM checks: operation controls, duplicate click, failure recovery, stale card responses, text escaping, safe links, route validation, queue races, menu editor preservation and material report races/unknown values OK");
 	} finally {
 		ui.dom.window.close();

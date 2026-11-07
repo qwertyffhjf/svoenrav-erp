@@ -5,6 +5,7 @@
 	const clone = (value) => JSON.parse(JSON.stringify(value));
 	const docs = new Map();
 	let sequence = 0;
+	let modelVersion = 0;
 	let snapshotCaptured = true;
 	const message = (text) => { document.getElementById("preview-message").textContent = String(text); };
 	const show = (view) => {
@@ -32,7 +33,7 @@
 				const id = "demo-options-" + (++sequence);
 				input.attr("list", id);
 				const list = $("<datalist></datalist>").attr("id", id).appendTo(wrapper);
-				const values = {"Work Order":[demo.work_order.name,demo.second_work_order.name],"Sales Order":[demo.sales_order.name],"Purchase Order":[demo.purchase_order],"Item":[demo.material]};
+				const values = {"Work Order":[demo.work_order.name,demo.second_work_order.name],"Sales Order":[demo.sales_order.name],"Purchase Order":[demo.purchase_order],"Item":[demo.material,demo.work_order.production_item],"UOM":["шт"],"Item Group":["Демо-изделия"]};
 				for (const value of values[df.options] || []) $("<option></option>").val(value).appendTo(list);
 			}
 		}
@@ -98,11 +99,36 @@
 	};
 	const xcall=async(method,args={})=>{
 		try {
-			if(method.endsWith("get_options"))return {operations:clone(demo.operations),can_read_orders:true,can_read_work_orders:true,can_cutting:true,can_reserve:true,can_allocate_payments:true};
+			if(method.endsWith("get_options"))return {operations:clone(demo.operations),can_read_orders:true,can_read_work_orders:true,can_cutting:true,can_reserve:true,can_allocate_payments:true,can_catalog:true,can_create_model:true,can_create_item:true,can_units:true};
 			if(method.endsWith("prepare_operation")) {
 				if(args.operation === "delivery" && args.source_name === demo.sales_order.name) return {existing_drafts:{allowed:true,rows:[{name:"DEMO-DN-DRAFT",url:"/desk/delivery-note/DEMO-DN-DRAFT",modified:"2026-11-04 11:00:00"}],has_more:false}};
 				return prepared(args);
 			}
+			if(method.endsWith("get_models")) {
+				const query=(args.search||"").toLowerCase();const rows=demo.models.filter(row=>(args.state==="all"||!!row.archived===(args.state==="archived")) && [row.title,row.model_code,row.item_code].some(value=>value.toLowerCase().includes(query)));
+				return {rows:clone(rows.slice(args.start||0,(args.start||0)+24)),start:Number(args.start||0),has_more:rows.length>(args.start||0)+24,can_create:true};
+			}
+			if(method.endsWith("get_model")) {
+				const model=demo.models.find(row=>row.name===args.model);if(!model)throw Error("Демо-модель не найдена.");return clone(model);
+			}
+			if(method.endsWith("create_model")) {
+				if(!args.code || !args.title || demo.models.some(row=>row.name===args.code))throw Error("Укажите уникальный артикул и название.");
+				if(!args.item_code && (!args.stock_uom || !args.item_group))throw Error("Укажите номенклатуру либо её единицу и группу.");
+				const row={name:args.code,model_code:args.code,title:args.title,item_code:args.item_code||args.code,description:args.description||"",stock_uom:args.stock_uom||"шт",item_group:args.item_group||"Демо-изделия",archived:0,numbered:1,photos:[],main_photo:null,can_edit:true,modified:"DEMO-"+(++modelVersion),url:"/desk/svoenrav-model/"+encodeURIComponent(args.code)};demo.models.push(row);return clone(row);
+			}
+			if(method.endsWith("update_model") || method.endsWith("set_cover") || method.endsWith("remove_photo")) {
+				const row=demo.models.find(row=>row.name===args.model);if(!row)throw Error("Демо-модель не найдена.");
+				if(args.modified!=null && args.modified!==row.modified)throw Error("Карточка изменена.");
+				if(method.endsWith("update_model"))for(const key of ["title","description","archived"])if(args[key]!=null)row[key]=args[key];
+				if(method.endsWith("set_cover")){if(!row.photos.some(p=>p.url===args.file_url))throw Error("Фото не найдено.");row.main_photo=args.file_url;}
+				if(method.endsWith("remove_photo")){row.photos=row.photos.filter(p=>p.url!==args.file_url);if(row.main_photo===args.file_url)row.main_photo=row.photos[0]?.url||null;}
+				row.modified="DEMO-"+(++modelVersion);return clone(row);
+			}
+			if(method.endsWith("get_units")) {
+				const query=(args.search||"").toLowerCase();const rows=demo.units.filter(row=>(!args.model||row.model===args.model) && [row.name,row.model_title,row.item_code].some(value=>value.toLowerCase().includes(query)));return {rows:clone(rows),start:0,has_more:false,notice:"Тестовый реестр: один выпуск действующий, другой отменён; номера различаются и сохраняются."};
+			}
+			if(method.endsWith("get_unit")){const row=demo.units.find(row=>row.name===args.number);if(!row)throw Error("Тестовый номер не найден.");return clone(row);}
+			if(method.endsWith("numbering_state"))return {enabled:true,can_configure:true,next_number:3,last_issued:2,url:"/desk/svoenrav-product-sequence/main",notice:"Вымышленная последовательность настроена только для демонстрации. Рабочий стартовый номер нужно подтвердить отдельно."};
 			if(method.endsWith("get_queue_plan"))return clone(demo.plan);
 			if(method.endsWith("reserve_queue")) {
 				const created=[];
@@ -137,7 +163,7 @@
 		} catch(error) {message(error.message);throw error;}
 	};
 	window.__=(value)=>value;
-	window.frappe={pages:{"svoenrav-workshop":{}},route_options:null,ui:{make_app_page:()=>({main:$("#preview-page-main")}),form:{make_control:control}},xcall,msgprint:message,confirm:(text,callback)=>{if(window.confirm(text))callback();},
+	window.frappe={pages:{"svoenrav-workshop":{}},route_options:null,ui:{make_app_page:()=>({main:$("#preview-page-main")}),form:{make_control:control},FileUploader:function(){message("В автономном превью файлы не загружаются. В ERP откроется загрузчик закрытых фотографий модели.");}},xcall,msgprint:message,confirm:(text,callback)=>{if(window.confirm(text))callback();},
 		model:{sync:(doc)=>{docs.set(doc.name,clone(doc));return [doc];}},
 		set_route:async(view,doctype,name)=>{
 			if(view!=="Form")throw Error("В превью доступен только просмотр документа.");

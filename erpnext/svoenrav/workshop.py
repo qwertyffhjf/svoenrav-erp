@@ -42,6 +42,10 @@ def get_options():
 	require_staff()
 	return {
 		"operations": [{"key": key, **spec} for key, spec in OPERATIONS.items() if _available(spec)],
+		"can_catalog": bool(frappe.has_permission("SVOENRAV Model",ptype="read")),
+		"can_create_model": bool(frappe.has_permission("SVOENRAV Model",ptype="create")),
+		"can_create_item": bool(frappe.has_permission("Item",ptype="create")),
+		"can_units": bool(frappe.has_permission("SVOENRAV Product Unit",ptype="read")),
 		"simple_default": "SVOENRAV Operator" in frappe.get_roles() and not set(frappe.get_roles()).intersection({"SVOENRAV Owner", "SVOENRAV Planner", "SVOENRAV Finance", "System Manager"}),
 		"can_reserve": all(frappe.has_permission("Stock Reservation Entry", ptype=p) for p in ("read", "create", "submit")) and bool(frappe.has_permission("Work Order", ptype="write")),
 		"can_allocate_payments": bool(frappe.has_permission("SVOENRAV Payment Allocation", ptype="create")),

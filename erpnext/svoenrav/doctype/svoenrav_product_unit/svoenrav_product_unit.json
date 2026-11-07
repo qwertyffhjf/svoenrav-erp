@@ -1,0 +1,164 @@
+{
+ "doctype": "DocType",
+ "name": "SVOENRAV Product Unit",
+ "module": "SVOENRAV",
+ "engine": "InnoDB",
+ "field_order": [
+  "product_number",
+  "model",
+  "model_title",
+  "item_code",
+  "status",
+  "company",
+  "manufacture_entry",
+  "stock_entry_detail",
+  "ordinal",
+  "unit_key",
+  "work_order",
+  "sales_order",
+  "native_serial_no",
+  "photo_at_issue"
+ ],
+ "fields": [
+  {
+   "fieldname": "product_number",
+   "fieldtype": "Int",
+   "label": "Порядковый номер",
+   "read_only": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Link",
+   "label": "Модель",
+   "options": "SVOENRAV Model",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "model_title",
+   "fieldtype": "Data",
+   "label": "Название при выпуске",
+   "read_only": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Номенклатура",
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Состояние выпуска",
+   "options": "Выпущено\nВыпуск отменён",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Компания",
+   "options": "Company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "manufacture_entry",
+   "fieldtype": "Link",
+   "label": "Документ выпуска",
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_entry_detail",
+   "fieldtype": "Data",
+   "label": "Строка выпуска",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ordinal",
+   "fieldtype": "Int",
+   "label": "Экземпляр в строке",
+   "read_only": 1
+  },
+  {
+   "fieldname": "unit_key",
+   "fieldtype": "Data",
+   "label": "Ключ строки и экземпляра",
+   "unique": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "work_order",
+   "fieldtype": "Link",
+   "label": "Производственное задание",
+   "options": "Work Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Заказ покупателя",
+   "options": "Sales Order",
+   "read_only": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "native_serial_no",
+   "fieldtype": "Data",
+   "label": "Серийный номер ERPNext",
+   "read_only": 1,
+   "permlevel": 1
+  },
+  {
+   "fieldname": "photo_at_issue",
+   "fieldtype": "Attach Image",
+   "label": "Фото модели при выпуске",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1
+  },
+  {
+   "role": "Manufacturing User",
+   "read": 1
+  },
+  {
+   "role": "Manufacturing Manager",
+   "read": 1
+  },
+  {
+   "role": "Stock User",
+   "read": 1
+  },
+  {
+   "role": "SVOENRAV Operator",
+   "read": 1
+  },
+  {
+   "role": "SVOENRAV Planner",
+   "read": 1
+  },
+  {
+   "role": "SVOENRAV Owner",
+   "read": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "permlevel": 1
+  },
+  {
+   "role": "SVOENRAV Owner",
+   "read": 1,
+   "permlevel": 1
+  }
+ ],
+ "autoname": "prompt",
+ "track_changes": 1
+}

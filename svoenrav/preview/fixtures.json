@@ -104,5 +104,106 @@
     "received_amount": 10000,
     "paid_to_account_currency": "RUB",
     "url": "/desk/payment-entry/DEMO-PAY-001"
-  }
+  },
+  "models": [
+    {
+      "name": "DEMO-TOTE-01",
+      "model_code": "DEMO-TOTE-01",
+      "title": "Демо-тоут",
+      "item_code": "DEMO-BAG",
+      "description": "Тестовая модель для проверки каталога. Цветные PNG — тестовые файлы, не фотографии изделий мастерской.",
+      "stock_uom": "шт",
+      "item_group": "Демо-изделия",
+      "archived": 0,
+      "numbered": 1,
+      "modified": "2026-11-07 12:00:00",
+      "can_edit": true,
+      "main_photo": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMIttIAAAGZALZ+RlASAAAAAElFTkSuQmCC",
+      "photos": [
+        {
+          "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMIttIAAAGZALZ+RlASAAAAAElFTkSuQmCC",
+          "caption": "Тестовый PNG: проверка обложки, не фото изделия"
+        },
+        {
+          "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQ09EEAAD3AHwE+u/JAAAAAElFTkSuQmCC",
+          "caption": "Тестовый PNG: проверка галереи, не фото изделия"
+        }
+      ],
+      "url": "/desk/svoenrav-model/DEMO-TOTE-01"
+    }
+  ],
+  "units": [
+    {
+      "name": "000001",
+      "product_number": 1,
+      "model": "DEMO-TOTE-01",
+      "model_title": "Демо-тоут",
+      "item_code": "DEMO-BAG",
+      "status": "Выпущено",
+      "company": "ДЕМО — тестовая мастерская",
+      "manufacture_entry": "DEMO-MFG-001",
+      "stock_entry_detail": "DEMO-MFG-ROW-1",
+      "ordinal": 1,
+      "creation": "2026-11-07 12:00:00",
+      "source_url": "/desk/stock-entry/DEMO-MFG-001",
+      "url": "/desk/svoenrav-product-unit/000001",
+      "photo": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMIttIAAAGZALZ+RlASAAAAAElFTkSuQmCC",
+      "work_order": {
+        "name": "DEMO-WO-001",
+        "url": "/desk/work-order/DEMO-WO-001"
+      },
+      "sales_order": null,
+      "native_serial_no": null,
+      "history": {
+        "rows": [
+          {
+            "at": "2026-11-07 12:00:00",
+            "field": "status",
+            "before": null,
+            "after": "Выпущено"
+          }
+        ],
+        "partial": false
+      }
+    },
+    {
+      "name": "000002",
+      "product_number": 2,
+      "model": "DEMO-TOTE-01",
+      "model_title": "Демо-тоут",
+      "item_code": "DEMO-BAG",
+      "status": "Выпуск отменён",
+      "company": "ДЕМО — тестовая мастерская",
+      "manufacture_entry": "DEMO-MFG-002",
+      "stock_entry_detail": "DEMO-MFG-ROW-2",
+      "ordinal": 1,
+      "creation": "2026-11-07 12:00:00",
+      "source_url": "/desk/stock-entry/DEMO-MFG-002",
+      "url": "/desk/svoenrav-product-unit/000002",
+      "photo": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMIttIAAAGZALZ+RlASAAAAAElFTkSuQmCC",
+      "work_order": {
+        "name": "DEMO-WO-001",
+        "url": "/desk/work-order/DEMO-WO-001"
+      },
+      "sales_order": null,
+      "native_serial_no": null,
+      "history": {
+        "rows": [
+          {
+            "at": "2026-11-07 12:00:00",
+            "field": "status",
+            "before": null,
+            "after": "Выпущено"
+          },
+          {
+            "at": "2026-11-07 12:30:00",
+            "field": "status",
+            "before": "Выпущено",
+            "after": "Выпуск отменён"
+          }
+        ],
+        "partial": false
+      }
+    }
+  ]
 }

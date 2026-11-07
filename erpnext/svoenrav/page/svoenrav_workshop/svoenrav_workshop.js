@@ -17,6 +17,10 @@ frappe.pages["svoenrav-workshop"].on_page_show = function (wrapper) {
 class SvoenravWorkshop {
 	constructor(page) {
 		this.page = page;
+		this.catalog_request = 0;
+		this.model_request = 0;
+		this.units_request = 0;
+		this.unit_request = 0;
 		this.request_id = 0;
 		this.queue_request_id = 0;
 		this.material_request_id = 0;
@@ -32,6 +36,7 @@ class SvoenravWorkshop {
 		.sv-workshop h2{font-size:21px;margin:8px 0 16px}.sv-workshop h3{font-size:17px;margin:24px 0 12px}
 		.sv-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}
 		.sv-workshop.sv-simple .sv-advanced,.sv-workshop.sv-simple .sv-finance{display:none!important}
+		.sv-catalog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px;margin:16px 0}.sv-model-card{overflow-wrap:anywhere;border:1px solid var(--border-color,#dce4df);border-radius:10px;padding:14px;min-width:0}.sv-model-card h3{margin:12px 0 6px}.sv-model-image{display:block;width:100%;height:200px;object-fit:cover;border-radius:7px;background:#eef1ee}.sv-image-placeholder{height:200px;background:#eef1ee;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#647168}.sv-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:14px;margin:18px 0}.sv-gallery img{height:170px}.sv-catalog-detail{margin-top:20px;overflow-wrap:anywhere}.sv-catalog-detail h2,.sv-model-card h3{overflow-wrap:anywhere}
 		.sv-mobile-nav{display:none;width:100%;min-height:44px;padding:10px;border:1px solid var(--border-color,#dce4df);border-radius:8px;margin-bottom:12px;font:inherit}
 		.sv-workshop button{min-height:44px}.sv-tabs button{min-height:44px}.sv-panel{padding:20px;border:1px solid var(--border-color,#dce4df);border-radius:10px;margin-bottom:18px}
 		.sv-controls{display:grid;grid-template-columns:1fr 1fr;gap:18px}.sv-quantity{max-width:260px}
@@ -44,7 +49,7 @@ class SvoenravWorkshop {
 		@media(max-width:600px){.sv-mobile-nav{display:block}.sv-workshop>.sv-tabs>button:not(.sv-mode){display:none}.sv-workshop{padding:12px}.sv-panel{padding:14px}.sv-controls{grid-template-columns:1fr;gap:0}.sv-summary>div{flex:1 1 42%}.sv-workshop td,.sv-workshop th{padding:8px}}
 		</style>`);
 		this.mobile_nav = $("<select class='sv-mobile-nav' aria-label='Раздел мастерской'></select>").appendTo(this.root).on("change", () => this.show(this.mobile_nav.val()));
-		for(const [value,label] of [["operations","Операции"],["order","Карточка заказа"],["queue","Очередь производства"],["materials","Материалы задания"],["cutting","Раскрой"],["plan","План материалов"],["policy","Учёт материалов"]]) $("<option></option>").val(value).text(label).appendTo(this.mobile_nav);
+		for(const [value,label] of [["catalog","Каталог моделей"],["units","Номерные изделия"],["operations","Операции"],["order","Карточка заказа"],["queue","Очередь производства"],["materials","Материалы задания"],["cutting","Раскрой"],["plan","План материалов"],["policy","Учёт материалов"]]) $("<option></option>").val(value).text(label).appendTo(this.mobile_nav);
 		this.tabs = $("<nav class='sv-tabs' aria-label='Разделы мастерской'></nav>").appendTo(this.root);
 		this.simple_button = $("<button class='btn btn-default sv-mode' type='button' aria-pressed='false'>Режим сотрудника</button>").appendTo(this.tabs).on("click", () => {
 			this.simple_mode = !this.simple_mode;
@@ -53,6 +58,8 @@ class SvoenravWorkshop {
 			if(this.simple_mode && this.current_view === "plan") this.show("queue");
 			this.simple_button.attr("aria-pressed", String(this.simple_mode)).text(this.simple_mode ? "Полный экран" : "Режим сотрудника");
 		});
+		this.catalog_tab = $("<button class='btn btn-default' type='button'>Каталог моделей</button>").appendTo(this.tabs).on("click", () => this.show("catalog"));
+		this.units_tab = $("<button class='btn btn-default' type='button'>Номерные изделия</button>").appendTo(this.tabs).on("click", () => this.show("units"));
 		this.plan_tab = $("<button class='btn btn-default sv-advanced' type='button'>План материалов</button>").appendTo(this.tabs).on("click", () => this.show("plan"));
 		this.operation_tab = $("<button class='btn btn-default' type='button'>Операции</button>").appendTo(this.tabs).on("click", () => this.show("operations"));
 		this.order_tab = $("<button class='btn btn-default' type='button'>Карточка заказа</button>").appendTo(this.tabs).on("click", () => this.show("order"));
@@ -61,6 +68,8 @@ class SvoenravWorkshop {
 		this.cutting_tab = $("<button class='btn btn-default' type='button'>Раскрой</button>").appendTo(this.tabs).on("click", () => this.show("cutting"));
 		this.policy_tab = $("<button class='btn btn-default' type='button'>Как учитываются материалы</button>").appendTo(this.tabs).on("click", () => this.show("policy"));
 		this.feedback = $("<div class='sv-feedback text-muted' role='status'></div>").appendTo(this.root);
+		this.catalog_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
+		this.units_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.operations_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.order_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
 		this.queue_panel = $("<section class='sv-panel'></section>").appendTo(this.root);
@@ -83,6 +92,8 @@ class SvoenravWorkshop {
 			this.build_materials();
 			this.build_cutting();
 			this.build_plan();
+			this.build_catalog();
+			this.build_units();
 			if(this.options.simple_default && !this.simple_mode) this.simple_button.trigger("click");
 			this.ready = true;
 			this.feedback.empty();
@@ -95,6 +106,8 @@ class SvoenravWorkshop {
 	show(view) {
 		this.current_view = view;
 		this.mobile_nav.val(view);
+		this.catalog_panel.toggle(view === "catalog");
+		this.units_panel.toggle(view === "units");
 		this.plan_panel.toggle(view === "plan");
 		this.operations_panel.toggle(view === "operations");
 		this.order_panel.toggle(view === "order");
@@ -102,9 +115,11 @@ class SvoenravWorkshop {
 		this.material_panel.toggle(view === "materials");
 		this.cutting_panel.toggle(view === "cutting");
 		this.policy_panel.toggle(view === "policy");
-		for (const [key, button] of [["plan", this.plan_tab], ["operations", this.operation_tab], ["order", this.order_tab], ["queue", this.queue_tab], ["materials", this.material_tab], ["cutting", this.cutting_tab], ["policy", this.policy_tab]]) {
+		for (const [key, button] of [["catalog", this.catalog_tab], ["units", this.units_tab], ["plan", this.plan_tab], ["operations", this.operation_tab], ["order", this.order_tab], ["queue", this.queue_tab], ["materials", this.material_tab], ["cutting", this.cutting_tab], ["policy", this.policy_tab]]) {
 			button.toggleClass("btn-primary", key === view).attr("aria-pressed", String(key === view));
 		}
+		if(view === "catalog" && this.ready && this.options.can_catalog) this.load_models(0);
+		if(view === "units" && this.ready && this.options.can_units) {this.load_units(0);this.load_numbering();}
 		if (view === "queue" && this.ready && this.options.can_read_work_orders) this.load_queue(this.queue_start || 0);
 	}
 
@@ -115,6 +130,8 @@ class SvoenravWorkshop {
 		if (!["operation", "sales_order", "work_order", "view"].some((key) => key in route)) return;
 		frappe.route_options = null;
 		if (typeof route.work_order === "string" && this.material_field) return this.open_materials(route.work_order);
+		if(route.view === "catalog") return this.show("catalog");
+		if(route.view === "units") return this.show("units");
 		if (route.view === "plan") return this.show("plan");
 		if (route.view === "materials") return this.show("materials");
 		if (route.view === "cutting") return this.show("cutting");
@@ -684,6 +701,187 @@ class SvoenravWorkshop {
 			if(data.state === "missing" && data.can_capture) $("<button type='button' class='btn btn-primary'>Зафиксировать текущие нормы</button>").appendTo(this.spec_body).on("click", () => this.load_specification(true));
 		} catch(error) { if(request === this.spec_request_id) this.spec_body.text("Состав не проверен. Проверьте права и сообщение ERPNext."); }
 		finally { this.spec_busy = false; }
+	}
+
+	catalog_control(host, df) {
+		return frappe.ui.form.make_control({parent:$("<div></div>").appendTo(host),df,render_input:true});
+	}
+
+	image(host, url, label, className="sv-model-image") {
+		let safe = false;
+		try {
+			const parsed = new URL(url,window.location.href);
+			safe = typeof url === "string" && ((["http:","https:","file:"].includes(parsed.protocol) && parsed.origin === window.location.origin && /^\/(private\/)?files\//.test(parsed.pathname)) || /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(url) && url.length < 16384);
+		} catch(error) { /* Render a placeholder when the URL is invalid. */ }
+		if(!safe) return $("<div class='sv-image-placeholder'>Нет фотографии</div>").appendTo(host);
+		return $("<img>").addClass(className).attr({src:url,alt:label,loading:"lazy"}).appendTo(host).on("error",function(){ $(this).replaceWith($("<div class='sv-image-placeholder'>Фотография недоступна</div>")); });
+	}
+
+	build_catalog() {
+		this.catalog_panel.append("<h2>Каталог моделей</h2>");
+		if(!this.options.can_catalog) return this.catalog_panel.append("<p>Нет права чтения каталога моделей.</p>");
+		const host=$("<div class='sv-controls'></div>").appendTo(this.catalog_panel);
+		this.catalog_search=this.catalog_control(host,{fieldname:"model_search",fieldtype:"Data",label:"Поиск по названию или артикулу"});
+		this.catalog_state=this.catalog_control(host,{fieldname:"model_state",fieldtype:"Select",label:"Показывать",options:[{value:"active",label:"Активные"},{value:"archived",label:"Архив"},{value:"all",label:"Все"}]});
+		$("<button class='btn btn-default' type='button'>Найти модели</button>").appendTo(this.catalog_panel).on("click",()=>this.load_models(0));
+		if(this.options.can_create_model) $("<button class='btn btn-primary' type='button'>Добавить модель</button>").appendTo(this.catalog_panel).on("click",()=>this.model_editor());
+		this.catalog_grid=$("<div class='sv-catalog-grid' aria-live='polite'></div>").appendTo(this.catalog_panel);
+		this.catalog_paging=$("<div class='sv-tabs'></div>").appendTo(this.catalog_panel);
+		this.catalog_detail=$("<div class='sv-catalog-detail' aria-live='polite'></div>").appendTo(this.catalog_panel);
+	}
+
+	async load_models(start=0) {
+		if(!this.catalog_grid)return;
+		const request=++this.catalog_request;
+		this.catalog_grid.text("Загружаем модели…");this.catalog_paging.empty();
+		try {
+			const data=await frappe.xcall("erpnext.svoenrav.catalog.get_models",{search:this.catalog_search.get_value()||"",state:this.catalog_state.get_value()||"active",start});
+			if(request!==this.catalog_request)return;
+			this.catalog_grid.empty();
+			if(!data.rows.length)this.catalog_grid.text("Модели не найдены. Измените поиск или добавьте модель.");
+			for(const row of data.rows) {
+				const card=$("<article class='sv-model-card'></article>").appendTo(this.catalog_grid);
+				this.image(card,row.main_photo,row.title);
+				$("<h3></h3>").text(row.title).appendTo(card);
+				$("<p></p>").text(row.model_code+(row.archived?" · В архиве":"")).appendTo(card);
+				$("<button class='btn btn-default' type='button'>Открыть модель</button>").appendTo(card).on("click",()=>this.open_model(row.name));
+			}
+			if(start>0)$("<button class='btn btn-default' type='button'>Предыдущие модели</button>").appendTo(this.catalog_paging).on("click",()=>this.load_models(Math.max(0,start-24)));
+			if(data.has_more)$("<button class='btn btn-default' type='button'>Следующие модели</button>").appendTo(this.catalog_paging).on("click",()=>this.load_models(start+24));
+		} catch(error) {if(request===this.catalog_request)this.catalog_grid.text("Каталог не загружен. Проверьте сообщение ERPNext и права доступа.");}
+	}
+
+	async open_model(name) {
+		const request=++this.model_request;this.selected_model=name;
+		this.catalog_detail.text("Загружаем карточку модели…");
+		try {
+			const data=await frappe.xcall("erpnext.svoenrav.catalog.get_model",{model:name});
+			if(request===this.model_request)this.render_model(data);
+		} catch(error){if(request===this.model_request)this.catalog_detail.text("Модель недоступна. Проверьте права и сообщение ERPNext.");}
+	}
+
+	render_model(data) {
+		const host=this.catalog_detail.empty();this.selected_model=data.name;
+		$("<h2></h2>").text(data.title).appendTo(host);
+		$("<p></p>").text("Артикул: "+data.model_code+" · Номенклатура: "+data.item_code+" · Единица: "+(data.stock_uom||"—")+(data.archived?" · В архиве":"")).appendTo(host);
+		$("<p></p>").text(data.description||"").appendTo(host);
+		const actions=$("<div class='sv-tabs'></div>").appendTo(host);
+		if(data.url)actions.append(this.link({name:"Полная карточка модели",url:data.url}));
+		$("<button class='btn btn-default' type='button'>Экземпляры этой модели</button>").appendTo(actions).on("click",()=>{this.unit_model_filter=data.name;this.show("units");});
+		if(data.can_edit) {
+			$("<button class='btn btn-default' type='button'>Изменить описание</button>").appendTo(actions).on("click",()=>this.model_editor(data));
+			$("<button class='btn btn-default' type='button'>Добавить фотографии</button>").appendTo(actions).on("click",()=>this.upload_model_photos(data.name));
+			$("<button class='btn btn-default' type='button'></button>").text(data.archived?"Вернуть из архива":"В архив").appendTo(actions).on("click",()=>frappe.confirm(data.archived?"Вернуть модель в активный каталог?":"Скрыть модель из активного каталога? Номерные карточки и фотографии сохранятся.",()=>this.model_action("update_model",{model:data.name,archived:data.archived?0:1,modified:data.modified})));
+		}
+		const gallery=$("<div class='sv-gallery'></div>").appendTo(host);
+		if(!data.photos.length)gallery.append("<p>Добавьте обложку и фотографии деталей изделия. До 12 фотографий, JPG/PNG/WEBP до 10 МБ.</p>");
+		for(const photo of data.photos) {
+			const card=$("<div></div>").appendTo(gallery);this.image(card,photo.url,photo.caption||data.title);
+			$("<p></p>").text(photo.caption||"Фото модели").appendTo(card);
+			if(data.can_edit) {
+				$("<button class='btn btn-default' type='button'>На обложку</button>").appendTo(card).on("click",()=>this.model_action("set_cover",{model:data.name,file_url:photo.url}));
+				$("<button class='btn btn-default' type='button'>Убрать из галереи</button>").appendTo(card).on("click",()=>this.model_action("remove_photo",{model:data.name,file_url:photo.url}));
+			}
+		}
+		$("<p class='sv-help'></p>").text("Фотографии хранятся закрытыми файлами ERP. Удаление из галереи не удаляет файл. Нормы и производство ведутся по связанной номенклатуре и BOM.").appendTo(host);
+	}
+
+	model_editor(data=null) {
+		++this.model_request;this.selected_model=data?.name||null;
+		const host=this.catalog_detail.empty();$("<h2></h2>").text(data?"Изменить модель":"Новая модель").appendTo(host);
+		const fields={};
+		const definitions=data?[{fieldname:"title",fieldtype:"Data",label:"Название модели",reqd:1,default:data.title},{fieldname:"description",fieldtype:"Small Text",label:"Описание",default:data.description}]:[
+			{fieldname:"code",fieldtype:"Data",label:"Артикул модели",reqd:1},
+			{fieldname:"title",fieldtype:"Data",label:"Название модели",reqd:1},
+			{fieldname:"item_code",fieldtype:"Link",options:"Item",label:"Существующая номенклатура (если уже есть)"},
+			...(this.options.can_create_item?[{fieldname:"stock_uom",fieldtype:"Link",options:"UOM",label:"Единица для новой номенклатуры"},{fieldname:"item_group",fieldtype:"Link",options:"Item Group",label:"Группа для новой номенклатуры"}]:[]),
+			{fieldname:"description",fieldtype:"Small Text",label:"Описание"},
+		];
+		for(const df of definitions){fields[df.fieldname]=this.catalog_control(host,df);if(df.default!=null)fields[df.fieldname].set_value(df.default);}
+		$("<p class='sv-help'></p>").text(data?"Артикул и номера ранее выпущенных экземпляров сохранятся.":"Выберите существующую номенклатуру. Если её ещё нет, заполните единицу и группу — позиция создастся вместе с моделью. Фото добавляются после сохранения.").appendTo(host);
+		const request=this.model_request;
+		const save=$("<button class='btn btn-primary' type='button'>Сохранить модель</button>").appendTo(host).on("click",async()=>{
+			if(save.prop("disabled"))return;save.prop("disabled",true);
+			const args={};for(const[key,control]of Object.entries(fields))args[key]=control.get_value()||"";
+			if(data){args.model=data.name;args.modified=data.modified;}
+			try {
+				const result=await frappe.xcall("erpnext.svoenrav.catalog."+(data?"update_model":"create_model"),args);
+				if(request===this.model_request){this.render_model(result);await this.load_models(0);}
+			} catch(error){if(request===this.model_request)frappe.msgprint("Модель не сохранена. Проверьте сообщение ERPNext; введённые поля сохранены на экране.");}
+			finally{save.prop("disabled",false);}
+		});
+		this.model_editor_fields=fields;
+	}
+
+	async model_action(method,args) {
+		if(this.model_busy)return;
+		this.model_busy=true;const request=this.model_request;
+		try {
+			const data=await frappe.xcall("erpnext.svoenrav.catalog."+method,args);
+			if(request===this.model_request && this.selected_model===args.model){this.render_model(data);await this.load_models(0);}
+		} catch(error){frappe.msgprint("Изменение не сохранено. Проверьте сообщение ERPNext и обновите карточку.");}
+		finally{this.model_busy=false;}
+	}
+
+	upload_model_photos(model) {
+		const request=this.model_request;
+		new frappe.ui.FileUploader({doctype:"SVOENRAV Model",docname:model,make_attachments_public:false,allow_toggle_private:false,allow_web_link:false,allow_google_drive:false,disable_file_browser:true,allow_multiple:true,restrictions:{allowed_file_types:[".jpg",".jpeg",".png",".webp"],max_file_size:10*1024*1024},on_success:async(file)=>{
+			try {
+				const data=await frappe.xcall("erpnext.svoenrav.catalog.attach_photo",{model,file_url:file.file_url});
+				if(request===this.model_request && this.selected_model===model){this.render_model(data);await this.load_models(0);}
+			} catch(error){frappe.msgprint("Файл загружен, но не добавлен в галерею. Проверьте сообщение ERPNext и повторите добавление через полную карточку модели.");}
+		}});
+	}
+
+	build_units() {
+		this.units_panel.append("<h2>Номерные изделия SVOENRAV</h2>");
+		if(!this.options.can_units)return this.units_panel.append("<p>Нет права чтения номерных изделий.</p>");
+		this.numbering_body=$("<div class='sv-help'></div>").appendTo(this.units_panel);
+		this.unit_search=this.catalog_control(this.units_panel,{fieldname:"unit_search",fieldtype:"Data",label:"Номер изделия, модель или артикул"});
+		$("<button class='btn btn-default' type='button'>Найти изделия</button>").appendTo(this.units_panel).on("click",()=>this.load_units(0));
+		$("<button class='btn btn-default' type='button'>Все модели</button>").appendTo(this.units_panel).on("click",()=>{this.unit_model_filter=null;this.load_units(0);});
+		this.units_body=$("<div aria-live='polite'></div>").appendTo(this.units_panel);
+		this.units_paging=$("<div class='sv-tabs'></div>").appendTo(this.units_panel);
+		this.unit_detail=$("<div class='sv-catalog-detail' aria-live='polite'></div>").appendTo(this.units_panel);
+	}
+
+	async load_numbering() {
+		if(!this.numbering_body)return;
+		try {
+			const data=await frappe.xcall("erpnext.svoenrav.products.numbering_state");this.numbering_body.empty();
+			$("<p></p>").text((data.enabled?"Автоматическая нумерация включена. ":"Нумерация ещё не настроена или приостановлена. ")+data.notice).appendTo(this.numbering_body);
+			if(data.can_configure && data.url)this.numbering_body.append(this.link({name:"Настроить следующий номер",url:data.url}));
+		} catch(error){this.numbering_body.text("Состояние нумерации недоступно. Проверьте сообщение ERPNext.");}
+	}
+
+	async load_units(start=0) {
+		if(!this.units_body)return;
+		const request=++this.units_request;this.units_body.text("Загружаем изделия…");this.units_paging.empty();
+		try {
+			const data=await frappe.xcall("erpnext.svoenrav.products.get_units",{search:this.unit_search.get_value()||"",start,model:this.unit_model_filter||null});
+			if(request!==this.units_request)return;
+			this.units_body.empty();
+			this.table(this.units_body,["Номер", "Модель при выпуске", "Состояние", "Выпуск", "Карточка"],data.rows.map(row=>[row.name,row.model_title,row.status,this.link({name:row.manufacture_entry,url:row.source_url}),$("<button class='btn btn-default' type='button'>Открыть изделие</button>").on("click",()=>this.open_unit(row.name))[0]]));
+			$("<p class='sv-help'></p>").text(data.notice+(this.unit_model_filter?" Фильтр модели: "+this.unit_model_filter:"")).appendTo(this.units_body);
+			if(start>0)$("<button class='btn btn-default' type='button'>Предыдущие изделия</button>").appendTo(this.units_paging).on("click",()=>this.load_units(Math.max(0,start-24)));
+			if(data.has_more)$("<button class='btn btn-default' type='button'>Следующие изделия</button>").appendTo(this.units_paging).on("click",()=>this.load_units(start+24));
+		} catch(error){if(request===this.units_request)this.units_body.text("Изделия не загружены. Проверьте права и сообщение ERPNext.");}
+	}
+
+	async open_unit(number) {
+		const request=++this.unit_request;this.unit_detail.text("Открываем изделие…");
+		try {
+			const data=await frappe.xcall("erpnext.svoenrav.products.get_unit",{number});
+			if(request!==this.unit_request)return;
+			const host=this.unit_detail.empty();$("<h2></h2>").text("SVOENRAV № "+data.name).appendTo(host);
+			$("<h3></h3>").text(data.model_title).appendTo(host);
+			$("<p></p>").text(data.status+" · "+data.item_code+" · "+(data.creation||"")).appendTo(host);
+			this.image(host,data.photo,data.model_title);
+			host.append(this.link({name:"Документ выпуска "+data.manufacture_entry,url:data.source_url}));
+			for(const key of ["work_order","sales_order","native_serial_no"])if(data[key])host.append($("<p></p>").append(this.link(data[key])));
+			if(data.history){$("<h3>История экземпляра</h3>").appendTo(host);this.table(host,["Дата", "Что изменилось", "Было", "Стало"],data.history.rows.map(row=>[row.at,({status:"Состояние выпуска",product_number:"Номер",model:"Модель",item_code:"Номенклатура"})[row.field]||"Данные карточки",row.before,row.after]));}
+			$("<p class='sv-help'></p>").text("Карточка создаётся проведённым выпуском. Отмена сохраняет номер в истории. Состояние выпуска не подтверждает отгрузку или владельца изделия.").appendTo(host);
+		} catch(error){if(request===this.unit_request)this.unit_detail.text("Изделие недоступно. Проверьте номер, права и сообщение ERPNext.");}
 	}
 
 	build_policy() {
